@@ -16,7 +16,7 @@ def fetch_synopsis(book_title):
     try:
         # Perform Google search
         query = f"{book_title} book synopsis"
-        for url in search(query, num=1, stop=1):
+        for url in search(query, num=1, stop=1, pause=2):
             response = requests.get(url, timeout=10)
             soup = BeautifulSoup(response.content, "html.parser")
             # Extract paragraphs for synopsis
