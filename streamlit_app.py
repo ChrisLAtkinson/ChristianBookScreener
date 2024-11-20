@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from googlesearch import search
+from serpapi import GoogleSearch
 import nltk
 
 # Download NLTK resources
@@ -11,17 +9,18 @@ nltk.download("punkt")
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
-# Function to fetch synopsis from online sources
-def fetch_synopsis(book_title):
+# Function to fetch synopsis from SerpAPI
+def fetch_synopsis(book_title, api_key):
     try:
-        # Perform Google search
-        query = f"{book_title} book synopsis"
-        for url in search(query, num=1, stop=1, pause=2):
-            response = requests.get(url, timeout=10)
-            soup = BeautifulSoup(response.content, "html.parser")
-            # Extract paragraphs for synopsis
-            paragraphs = soup.find_all("p")
-            return " ".join([p.text for p in paragraphs[:3]])  # First 3 paragraphs as synopsis
+        search = GoogleSearch({
+            "q": f"{book_title} book synopsis",
+            "api_key": api_key,
+        })
+        results = search.get_dict()
+        # Get the snippet from organic results
+        if "organic_results" in results and len(results["organic_results"]) > 0:
+            return results["organic_results"][0].get("snippet", "No synopsis found.")
+        return "No synopsis found."
     except Exception as e:
         return f"Error fetching synopsis: {e}"
 
@@ -41,13 +40,17 @@ st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
     The app will analyze each title to identify LGBTQ themes or characters.
+    You need a [SerpAPI](https://serpapi.com/) key to fetch Google search results.
     """
 )
+
+# API Key Input
+api_key = st.text_input("Enter your SerpAPI Key", type="password")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
-if uploaded_file:
+if api_key and uploaded_file:
     # Read the uploaded CSV
     books = pd.read_csv(uploaded_file)
     if "Title" not in books.columns:
@@ -62,7 +65,7 @@ if uploaded_file:
             results = []
             with st.spinner("Analyzing titles... This may take some time."):
                 for title in titles:
-                    synopsis = fetch_synopsis(title)
+                    synopsis = fetch_synopsis(title, api_key)
                     has_lgbtq_content = analyze_lgbtq_content(synopsis)
                     results.append(
                         {"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content}
