@@ -1,6 +1,6 @@
 streamlit
 pandas
-plotly
-reportlab
-kaleido
-matplotlib
+requests
+beautifulsoup4
+nltk
+google-search-results
