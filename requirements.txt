@@ -4,3 +4,4 @@ requests
 beautifulsoup4
 nltk
 google-search-results
+google-search-results==2.4.2
