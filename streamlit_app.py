@@ -1,20 +1,15 @@
 import streamlit as st
 import pandas as pd
 from serpapi import GoogleSearch
-import nltk
-from io import StringIO
-
-# Pre-download NLTK resources
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt")
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
 # Function to fetch synopsis from SerpAPI
 def fetch_synopsis(book_title, api_key):
+    """
+    Fetch a book synopsis using SerpAPI.
+    """
     try:
         search = GoogleSearch({
             "q": f"{book_title} book synopsis",
@@ -30,11 +25,14 @@ def fetch_synopsis(book_title, api_key):
 
 # Function to analyze synopsis for LGBTQ content
 def analyze_lgbtq_content(text):
+    """
+    Check if any LGBTQ keywords are present in the text.
+    """
     if not text:
         return False
-    tokens = nltk.word_tokenize(text.lower())
+    lower_text = text.lower()
     for keyword in LGBTQ_KEYWORDS:
-        if keyword.lower() in tokens:
+        if keyword.lower() in lower_text:
             return True
     return False
 
@@ -55,8 +53,8 @@ api_key = st.text_input("Enter your SerpAPI Key", type="password")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
 if api_key and uploaded_file:
-    # Read the uploaded CSV
     try:
+        # Read the uploaded CSV
         books = pd.read_csv(uploaded_file)
         if "Title" not in books.columns:
             st.error("The uploaded CSV must contain a column named 'Title'.")
@@ -82,11 +80,10 @@ if api_key and uploaded_file:
                 st.dataframe(result_df)
 
                 # Download results as CSV
-                csv = StringIO()
-                result_df.to_csv(csv, index=False)
+                csv = result_df.to_csv(index=False)
                 st.download_button(
                     label="Download Results as CSV",
-                    data=csv.getvalue(),
+                    data=csv,
                     file_name="lgbtq_books_results.csv",
                     mime="text/csv",
                 )
