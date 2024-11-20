@@ -1,25 +1,32 @@
 import streamlit as st
 import pandas as pd
-from serpapi import GoogleSearch
+import requests
+from bs4 import BeautifulSoup
+import time
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
-# Function to fetch synopsis from SerpAPI
-def fetch_synopsis(book_title, api_key):
+# Function to fetch synopsis using DuckDuckGo scraping
+def fetch_duckduckgo_synopsis(book_title):
     """
-    Fetch a book synopsis using SerpAPI.
+    Fetch a book synopsis using DuckDuckGo scraping.
     """
     try:
-        search = GoogleSearch({
-            "q": f"{book_title} book synopsis",
-            "api_key": api_key,
-        })
-        results = search.get_dict()
-        # Get the snippet from organic results
-        if "organic_results" in results and len(results["organic_results"]) > 0:
-            return results["organic_results"][0].get("snippet", "No synopsis found.")
-        return "No synopsis found."
+        headers = {"User-Agent": "Mozilla/5.0"}
+        url = f"https://duckduckgo.com/html/?q={book_title} book synopsis"
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Extract search results
+        results = []
+        for link in soup.find_all("a", class_="result__a"):
+            snippet = link.get_text(strip=True)
+            results.append(snippet)
+        
+        # Return the first result or a fallback message
+        return results[0] if results else "No synopsis found."
     except Exception as e:
         return f"Error fetching synopsis: {e}"
 
@@ -37,22 +44,18 @@ def analyze_lgbtq_content(text):
     return False
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier")
+st.title("LGBTQ Book Identifier with DuckDuckGo")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
     The app will analyze each title to identify LGBTQ themes or characters.
-    You need a [SerpAPI](https://serpapi.com/) key to fetch Google search results.
     """
 )
-
-# API Key Input
-api_key = st.text_input("Enter your SerpAPI Key", type="password")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
-if api_key and uploaded_file:
+if uploaded_file:
     try:
         # Read the uploaded CSV
         books = pd.read_csv(uploaded_file)
@@ -68,11 +71,13 @@ if api_key and uploaded_file:
                 results = []
                 with st.spinner("Analyzing titles... This may take some time."):
                     for title in titles:
-                        synopsis = fetch_synopsis(title, api_key)
+                        synopsis = fetch_duckduckgo_synopsis(title)
                         has_lgbtq_content = analyze_lgbtq_content(synopsis)
                         results.append(
                             {"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content}
                         )
+                        # Add a small delay to avoid hitting rate limits
+                        time.sleep(1)
 
                 # Convert results to DataFrame
                 result_df = pd.DataFrame(results)
@@ -90,7 +95,4 @@ if api_key and uploaded_file:
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
 else:
-    if not api_key:
-        st.info("Please enter your SerpAPI Key.")
-    if not uploaded_file:
-        st.info("Please upload a CSV file to proceed.")
+    st.info("Please upload a CSV file to proceed.")
