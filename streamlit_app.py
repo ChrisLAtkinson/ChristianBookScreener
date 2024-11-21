@@ -16,7 +16,7 @@ def fetch_synopsis_with_gpt(book_title):
     """
     try:
         prompt = f"Provide a short synopsis for the book titled '{book_title}'."
-        response = openai.ChatCompletion.create(
+        response = openai.Chat.create(
             model="gpt-3.5-turbo",  # Use "gpt-4" if you have access
             messages=[{"role": "system", "content": "You are a helpful assistant."},
                       {"role": "user", "content": prompt}],
