@@ -4,4 +4,4 @@ requests
 beautifulsoup4
 nltk
 google-search-results
-openai
+openai>=1.0.0
