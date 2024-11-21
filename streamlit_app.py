@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
-import openai
+from openai import OpenAI
 import time
 
 # Ensure OpenAI API key is loaded from Streamlit secrets
 try:
-    openai.api_key = st.secrets["openai"]["api_key"]
+    openai_client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 except KeyError:
     st.error(
         "OpenAI API key not found in Streamlit secrets. "
@@ -23,8 +23,8 @@ def fetch_synopsis_with_gpt(book_title):
     """
     try:
         prompt = f"Provide a short synopsis for the book titled '{book_title}'."
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Use "gpt-4" if you have access
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt},
@@ -32,7 +32,7 @@ def fetch_synopsis_with_gpt(book_title):
             max_tokens=150,
             temperature=0.7,
         )
-        return response["choices"][0]["message"]["content"].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error fetching synopsis: {e}"
 
