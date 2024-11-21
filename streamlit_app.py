@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 import time
 
 # Ensure OpenAI API key is loaded from Streamlit secrets
@@ -16,25 +16,33 @@ except KeyError:
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
-# Function to fetch synopsis using OpenAI GPT
-def fetch_synopsis_with_gpt(book_title):
+# Function to fetch synopsis using OpenAI GPT with retry logic for rate limiting
+def fetch_synopsis_with_gpt(book_title, max_retries=3):
     """
-    Fetch a book synopsis using OpenAI GPT API.
+    Fetch a book synopsis using OpenAI GPT API with retry logic for rate limiting.
     """
-    try:
-        prompt = f"Provide a short synopsis for the book titled '{book_title}'."
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=150,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error fetching synopsis: {e}"
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            prompt = f"Provide a short synopsis for the book titled '{book_title}'."
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=150,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
+        except RateLimitError as e:
+            retry_count += 1
+            wait_time = 2 ** retry_count  # Exponential backoff
+            st.warning(f"Rate limit exceeded, retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            return f"Error fetching synopsis: {e}"
+    return "Failed to fetch synopsis after multiple attempts."
 
 # Function to analyze synopsis for LGBTQ content
 def analyze_lgbtq_content(text):
@@ -49,7 +57,7 @@ def analyze_lgbtq_content(text):
             return True
     return False
 
-# Process a single batch of titles
+# Process a single batch of titles with rate limiting consideration
 def process_batch(titles_batch, batch_progress_bar):
     """
     Process a batch of titles by fetching synopses and analyzing LGBTQ content.
@@ -62,7 +70,9 @@ def process_batch(titles_batch, batch_progress_bar):
 
         # Update the progress bar
         batch_progress_bar.progress((i + 1) / len(titles_batch))
-        time.sleep(0.5)  # Avoid overwhelming the API
+        # Consider adding a sleep here as well to respect rate limits
+        time.sleep(0.5)  # This helps in avoiding overwhelming the API
+
     return results
 
 # Streamlit app UI
