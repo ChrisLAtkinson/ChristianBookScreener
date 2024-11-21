@@ -3,13 +3,15 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import time
-import concurrent.futures
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
 # Function to fetch synopsis using DuckDuckGo scraping
 def fetch_duckduckgo_synopsis(book_title):
+    """
+    Fetch a book synopsis using DuckDuckGo scraping.
+    """
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         url = f"https://duckduckgo.com/html/?q={book_title} book synopsis"
@@ -26,6 +28,9 @@ def fetch_duckduckgo_synopsis(book_title):
 
 # Function to analyze synopsis for LGBTQ content
 def analyze_lgbtq_content(text):
+    """
+    Check if any LGBTQ keywords are present in the text.
+    """
     if not text:
         return False
     lower_text = text.lower()
@@ -34,18 +39,25 @@ def analyze_lgbtq_content(text):
             return True
     return False
 
-# Function for parallel processing
-def fetch_and_analyze_parallel(title):
-    synopsis = fetch_duckduckgo_synopsis(title)
-    lgbtq_content = analyze_lgbtq_content(synopsis)
-    return {"Title": title, "Synopsis": synopsis, "LGBTQ Content": lgbtq_content}
+# Process a single batch of titles
+def process_batch(titles_batch):
+    """
+    Process a batch of titles by fetching synopses and analyzing LGBTQ content.
+    """
+    results = []
+    for title in titles_batch:
+        synopsis = fetch_duckduckgo_synopsis(title)
+        has_lgbtq_content = analyze_lgbtq_content(synopsis)
+        results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
+        time.sleep(1)  # Avoid overloading the server or getting rate-limited
+    return results
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with DuckDuckGo (Optimized)")
+st.title("LGBTQ Book Identifier with Batch Processing")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters.
+    The app will analyze each title to identify LGBTQ themes or characters, processing in batches of 100 titles.
     """
 )
 
@@ -62,35 +74,44 @@ if uploaded_file:
             st.success("File uploaded successfully!")
             titles = books["Title"].dropna().tolist()
             st.write(f"Found {len(titles)} book titles.")
+            
+            # Process the titles in batches of 100
+            batch_size = 100
+            total_batches = (len(titles) + batch_size - 1) // batch_size
+            results = []
 
-            # Process the titles
-            if st.button("Start Analysis"):
-                results = []
-                total_titles = len(titles)
+            for batch_number in range(total_batches):
+                st.write(f"Processing batch {batch_number + 1} of {total_batches}...")
+                start_index = batch_number * batch_size
+                end_index = min((batch_number + 1) * batch_size, len(titles))
+                batch = titles[start_index:end_index]
 
-                with st.spinner("Analyzing titles... This may take some time."):
-                    progress_bar = st.progress(0)  # Initialize progress bar
+                # Process the current batch
+                with st.spinner(f"Processing titles {start_index + 1} to {end_index}..."):
+                    batch_results = process_batch(batch)
+                    results.extend(batch_results)
 
-                    # Parallel processing
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                        futures = [executor.submit(fetch_and_analyze_parallel, title) for title in titles]
-                        for idx, future in enumerate(concurrent.futures.as_completed(futures)):
-                            results.append(future.result())
-                            progress_bar.progress((idx + 1) / total_titles)
+                # Update progress
+                progress = (batch_number + 1) / total_batches
+                st.progress(progress)
 
-                # Convert results to DataFrame
-                result_df = pd.DataFrame(results)
-                st.write("Analysis Complete!")
-                st.dataframe(result_df)
+                # Pause briefly before starting the next batch
+                if batch_number + 1 < total_batches:
+                    time.sleep(5)  # Short pause between batches
 
-                # Download results as CSV
-                csv = result_df.to_csv(index=False)
-                st.download_button(
-                    label="Download Results as CSV",
-                    data=csv,
-                    file_name="lgbtq_books_results.csv",
-                    mime="text/csv",
-                )
+            # Convert results to DataFrame
+            result_df = pd.DataFrame(results)
+            st.write("Analysis Complete!")
+            st.dataframe(result_df)
+
+            # Download results as CSV
+            csv = result_df.to_csv(index=False)
+            st.download_button(
+                label="Download Results as CSV",
+                data=csv,
+                file_name="lgbtq_books_results.csv",
+                mime="text/csv",
+            )
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
 else:
