@@ -3,8 +3,15 @@ import pandas as pd
 import openai
 import time
 
-# Access OpenAI API Key from secrets
-openai.api_key = st.secrets["openai"]["api_key"]
+# Ensure OpenAI API key is loaded from Streamlit secrets
+try:
+    openai.api_key = st.secrets["openai"]["api_key"]
+except KeyError:
+    st.error(
+        "OpenAI API key not found in Streamlit secrets. "
+        "Please add the key to `.streamlit/secrets.toml` (local) or the Secrets Manager (Streamlit Cloud)."
+    )
+    st.stop()
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
@@ -18,10 +25,12 @@ def fetch_synopsis_with_gpt(book_title):
         prompt = f"Provide a short synopsis for the book titled '{book_title}'."
         response = openai.Chat.create(
             model="gpt-3.5-turbo",  # Use "gpt-4" if you have access
-            messages=[{"role": "system", "content": "You are a helpful assistant."},
-                      {"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
             max_tokens=150,
-            temperature=0.7
+            temperature=0.7,
         )
         return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
