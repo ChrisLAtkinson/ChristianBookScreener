@@ -69,13 +69,31 @@ if uploaded_file:
             # Process the titles
             if st.button("Start Analysis"):
                 results = []
+                total_titles = len(titles)
+                start_time = time.time()
+
                 with st.spinner("Analyzing titles... This may take some time."):
-                    for title in titles:
+                    progress_bar = st.progress(0)  # Initialize progress bar
+                    for idx, title in enumerate(titles):
                         synopsis = fetch_duckduckgo_synopsis(title)
                         has_lgbtq_content = analyze_lgbtq_content(synopsis)
                         results.append(
                             {"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content}
                         )
+
+                        # Update progress bar
+                        progress = (idx + 1) / total_titles
+                        progress_bar.progress(progress)
+
+                        # Estimate remaining time
+                        elapsed_time = time.time() - start_time
+                        avg_time_per_title = elapsed_time / (idx + 1)
+                        remaining_time = avg_time_per_title * (total_titles - idx - 1)
+                        st.info(
+                            f"Processed {idx + 1} of {total_titles} titles. "
+                            f"Estimated time remaining: {int(remaining_time)} seconds."
+                        )
+
                         # Add a small delay to avoid hitting rate limits
                         time.sleep(1)
 
