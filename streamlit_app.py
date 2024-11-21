@@ -1,28 +1,29 @@
 import streamlit as st
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
+import openai
 import time
+
+# Set your OpenAI API key here (Replace "your_openai_api_key" with your actual key securely)
+openai.api_key = "your_openai_api_key"
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
-# Function to fetch synopsis using DuckDuckGo scraping
-def fetch_duckduckgo_synopsis(book_title):
+# Function to fetch synopsis using OpenAI GPT
+def fetch_synopsis_with_gpt(book_title):
     """
-    Fetch a book synopsis using DuckDuckGo scraping.
+    Fetch a book synopsis using OpenAI GPT API.
     """
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://duckduckgo.com/html/?q={book_title} book synopsis"
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        results = []
-        for link in soup.find_all("a", class_="result__a"):
-            snippet = link.get_text(strip=True)
-            results.append(snippet)
-        return results[0] if results else "No synopsis found."
+        prompt = f"Provide a short synopsis for the book titled '{book_title}'."
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Use "gpt-4" if you have access
+            messages=[{"role": "system", "content": "You are a helpful assistant."},
+                      {"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.7
+        )
+        return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"Error fetching synopsis: {e}"
 
@@ -39,29 +40,28 @@ def analyze_lgbtq_content(text):
             return True
     return False
 
-# Process a single batch of titles with a real-time progress bar
+# Process a single batch of titles
 def process_batch(titles_batch, batch_progress_bar):
     """
     Process a batch of titles by fetching synopses and analyzing LGBTQ content.
     """
     results = []
     for i, title in enumerate(titles_batch):
-        synopsis = fetch_duckduckgo_synopsis(title)
+        synopsis = fetch_synopsis_with_gpt(title)
         has_lgbtq_content = analyze_lgbtq_content(synopsis)
         results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
 
-        # Update the per-batch progress bar
+        # Update the progress bar
         batch_progress_bar.progress((i + 1) / len(titles_batch))
-        time.sleep(1)  # Avoid overloading the server or getting rate-limited
+        time.sleep(0.5)  # Avoid overwhelming the API
     return results
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with Batch Downloads")
+st.title("LGBTQ Book Identifier with OpenAI GPT")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
     The app will analyze each title to identify LGBTQ themes or characters, processing in batches of 100 titles.
-    After each batch, you can download the results for that batch.
     """
 )
 
