@@ -3,38 +3,29 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import time
+import concurrent.futures
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
 
 # Function to fetch synopsis using DuckDuckGo scraping
 def fetch_duckduckgo_synopsis(book_title):
-    """
-    Fetch a book synopsis using DuckDuckGo scraping.
-    """
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         url = f"https://duckduckgo.com/html/?q={book_title} book synopsis"
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Extract search results
         results = []
         for link in soup.find_all("a", class_="result__a"):
             snippet = link.get_text(strip=True)
             results.append(snippet)
-        
-        # Return the first result or a fallback message
         return results[0] if results else "No synopsis found."
     except Exception as e:
         return f"Error fetching synopsis: {e}"
 
 # Function to analyze synopsis for LGBTQ content
 def analyze_lgbtq_content(text):
-    """
-    Check if any LGBTQ keywords are present in the text.
-    """
     if not text:
         return False
     lower_text = text.lower()
@@ -43,8 +34,14 @@ def analyze_lgbtq_content(text):
             return True
     return False
 
+# Function for parallel processing
+def fetch_and_analyze_parallel(title):
+    synopsis = fetch_duckduckgo_synopsis(title)
+    lgbtq_content = analyze_lgbtq_content(synopsis)
+    return {"Title": title, "Synopsis": synopsis, "LGBTQ Content": lgbtq_content}
+
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with DuckDuckGo")
+st.title("LGBTQ Book Identifier with DuckDuckGo (Optimized)")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
@@ -70,32 +67,16 @@ if uploaded_file:
             if st.button("Start Analysis"):
                 results = []
                 total_titles = len(titles)
-                start_time = time.time()
 
                 with st.spinner("Analyzing titles... This may take some time."):
                     progress_bar = st.progress(0)  # Initialize progress bar
-                    for idx, title in enumerate(titles):
-                        synopsis = fetch_duckduckgo_synopsis(title)
-                        has_lgbtq_content = analyze_lgbtq_content(synopsis)
-                        results.append(
-                            {"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content}
-                        )
 
-                        # Update progress bar
-                        progress = (idx + 1) / total_titles
-                        progress_bar.progress(progress)
-
-                        # Estimate remaining time
-                        elapsed_time = time.time() - start_time
-                        avg_time_per_title = elapsed_time / (idx + 1)
-                        remaining_time = avg_time_per_title * (total_titles - idx - 1)
-                        st.info(
-                            f"Processed {idx + 1} of {total_titles} titles. "
-                            f"Estimated time remaining: {int(remaining_time)} seconds."
-                        )
-
-                        # Add a small delay to avoid hitting rate limits
-                        time.sleep(1)
+                    # Parallel processing
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                        futures = [executor.submit(fetch_and_analyze_parallel, title) for title in titles]
+                        for idx, future in enumerate(concurrent.futures.as_completed(futures)):
+                            results.append(future.result())
+                            progress_bar.progress((idx + 1) / total_titles)
 
                 # Convert results to DataFrame
                 result_df = pd.DataFrame(results)
