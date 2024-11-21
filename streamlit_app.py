@@ -39,21 +39,24 @@ def analyze_lgbtq_content(text):
             return True
     return False
 
-# Process a single batch of titles
-def process_batch(titles_batch):
+# Process a single batch of titles with a real-time progress bar
+def process_batch(titles_batch, batch_progress_bar):
     """
     Process a batch of titles by fetching synopses and analyzing LGBTQ content.
     """
     results = []
-    for title in titles_batch:
+    for i, title in enumerate(titles_batch):
         synopsis = fetch_duckduckgo_synopsis(title)
         has_lgbtq_content = analyze_lgbtq_content(synopsis)
         results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
+
+        # Update the per-batch progress bar
+        batch_progress_bar.progress((i + 1) / len(titles_batch))
         time.sleep(1)  # Avoid overloading the server or getting rate-limited
     return results
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with Batch Processing")
+st.title("LGBTQ Book Identifier with Batch and Real-Time Progress")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
@@ -86,17 +89,17 @@ if uploaded_file:
                 end_index = min((batch_number + 1) * batch_size, len(titles))
                 batch = titles[start_index:end_index]
 
+                # Initialize a progress bar for the current batch
+                batch_progress_bar = st.progress(0)
+
                 # Process the current batch
                 with st.spinner(f"Processing titles {start_index + 1} to {end_index}..."):
-                    batch_results = process_batch(batch)
+                    batch_results = process_batch(batch, batch_progress_bar)
                     results.extend(batch_results)
-
-                # Update progress
-                progress = (batch_number + 1) / total_batches
-                st.progress(progress)
 
                 # Pause briefly before starting the next batch
                 if batch_number + 1 < total_batches:
+                    st.write("Pausing briefly before the next batch...")
                     time.sleep(5)  # Short pause between batches
 
             # Convert results to DataFrame
