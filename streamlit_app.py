@@ -3,8 +3,8 @@ import pandas as pd
 import openai
 import time
 
-# Set your OpenAI API key here (Replace "your_openai_api_key" with your actual key securely)
-openai.api_key = "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"
+# Access OpenAI API Key from secrets
+openai.api_key = st.secrets["openai"]["api_key"]
 
 # LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
