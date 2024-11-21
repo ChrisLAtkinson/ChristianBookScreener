@@ -4,6 +4,4 @@ requests
 beautifulsoup4
 nltk
 google-search-results
-streamlit
-pandas
 openai
