@@ -56,11 +56,12 @@ def process_batch(titles_batch, batch_progress_bar):
     return results
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with Batch and Real-Time Progress")
+st.title("LGBTQ Book Identifier with Batch Downloads")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
     The app will analyze each title to identify LGBTQ themes or characters, processing in batches of 100 titles.
+    After each batch, you can download the results for that batch.
     """
 )
 
@@ -81,7 +82,7 @@ if uploaded_file:
             # Process the titles in batches of 100
             batch_size = 100
             total_batches = (len(titles) + batch_size - 1) // batch_size
-            results = []
+            cumulative_results = []
 
             for batch_number in range(total_batches):
                 st.write(f"Processing batch {batch_number + 1} of {total_batches}...")
@@ -95,24 +96,36 @@ if uploaded_file:
                 # Process the current batch
                 with st.spinner(f"Processing titles {start_index + 1} to {end_index}..."):
                     batch_results = process_batch(batch, batch_progress_bar)
-                    results.extend(batch_results)
+                    cumulative_results.extend(batch_results)
+
+                # Convert batch results to DataFrame
+                batch_df = pd.DataFrame(batch_results)
+                st.write(f"Batch {batch_number + 1} results:")
+                st.dataframe(batch_df)
+
+                # Batch download button
+                csv = batch_df.to_csv(index=False)
+                st.download_button(
+                    label=f"Download Batch {batch_number + 1} Results as CSV",
+                    data=csv,
+                    file_name=f"lgbtq_books_batch_{batch_number + 1}.csv",
+                    mime="text/csv",
+                )
 
                 # Pause briefly before starting the next batch
                 if batch_number + 1 < total_batches:
                     st.write("Pausing briefly before the next batch...")
                     time.sleep(5)  # Short pause between batches
 
-            # Convert results to DataFrame
-            result_df = pd.DataFrame(results)
-            st.write("Analysis Complete!")
-            st.dataframe(result_df)
-
-            # Download results as CSV
-            csv = result_df.to_csv(index=False)
+            # Download cumulative results
+            cumulative_df = pd.DataFrame(cumulative_results)
+            st.write("All batches processed! Download cumulative results below:")
+            st.dataframe(cumulative_df)
+            cumulative_csv = cumulative_df.to_csv(index=False)
             st.download_button(
-                label="Download Results as CSV",
-                data=csv,
-                file_name="lgbtq_books_results.csv",
+                label="Download Cumulative Results as CSV",
+                data=cumulative_csv,
+                file_name="lgbtq_books_all_batches.csv",
                 mime="text/csv",
             )
     except Exception as e:
