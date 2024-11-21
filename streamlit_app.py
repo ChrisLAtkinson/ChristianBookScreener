@@ -5,7 +5,8 @@ import time
 
 # Ensure OpenAI API key is loaded from Streamlit secrets
 try:
-    openai_client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+    API_KEY = st.secrets["openai"]["api_key"]
+    openai_client = OpenAI(api_key=API_KEY)
 except KeyError:
     st.error(
         "OpenAI API key not found in Streamlit secrets. "
