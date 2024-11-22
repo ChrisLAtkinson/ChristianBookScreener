@@ -197,9 +197,9 @@ if uploaded_file:
                 st.write(f"Processing Batch {i + 1} of {len(batches)}:")
                 process_batch(i, batch)
 
-                # Display batch results
-                st.write(f"Batch {i + 1} results:")
-                st.dataframe(st.session_state.results)
+            # Display cumulative results
+            st.write("Cumulative Results:")
+            st.dataframe(st.session_state.results)
 
             # Download cumulative results
             cumulative_csv_data = st.session_state.results.to_csv(index=False)
