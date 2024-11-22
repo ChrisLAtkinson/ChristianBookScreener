@@ -156,68 +156,64 @@ def process_batch(titles_batch):
 
 # Streamlit app
 st.title("LGBTQ Book Identifier")
-st.markdown(
-    """
-    Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters.
-    """
-)
+
+# Initialize session state
+if "cumulative_results" not in st.session_state:
+    st.session_state.cumulative_results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
 if uploaded_file:
-    try:
-        books = pd.read_csv(uploaded_file)
-        if "Title" not in books.columns:
-            st.error("The uploaded CSV must contain a column named 'Title'.")
-        else:
-            st.success("File uploaded successfully!")
-            titles = books["Title"].dropna().tolist()
-            st.write(f"Found {len(titles)} book titles.")
+    books = pd.read_csv(uploaded_file)
+    if "Title" not in books.columns:
+        st.error("The uploaded CSV must contain a column named 'Title'.")
+    else:
+        st.success("File uploaded successfully!")
+        titles = books["Title"].dropna().tolist()
+        st.write(f"Found {len(titles)} book titles.")
 
-            # Process titles in batches
-            batch_size = 100
-            batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
+        # Process titles in batches
+        batch_size = 100
+        batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-            cumulative_results_df = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
+        for batch_number, batch in enumerate(batches):
+            st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
+            progress = st.progress(0)
+            batch_results = []
 
-            for batch_number, batch in enumerate(batches):
-                st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
-                progress = st.progress(0)
-                batch_results = []
+            for i, title in enumerate(batch):
+                batch_results.extend(process_batch([title]))
+                progress.progress((i + 1) / len(batch))
 
-                for i, title in enumerate(batch):
-                    batch_results.extend(process_batch([title]))
-                    progress.progress((i + 1) / len(batch))
+            batch_df = pd.DataFrame(batch_results)
+            st.session_state.cumulative_results = pd.concat(
+                [st.session_state.cumulative_results, batch_df], ignore_index=True
+            )
 
-                batch_df = pd.DataFrame(batch_results)
-                cumulative_results_df = pd.concat([cumulative_results_df, batch_df], ignore_index=True)
+            # Display batch results
+            st.write(f"Batch {batch_number + 1} results:")
+            st.dataframe(batch_df)
 
-                st.write(f"Batch {batch_number + 1} results:")
-                st.dataframe(batch_df)
-
-                # Batch-specific CSV download
-                csv_batch = batch_df.to_csv(index=False)
-                st.download_button(
-                    label=f"Download Batch {batch_number + 1} Results as CSV",
-                    data=csv_batch,
-                    file_name=f"batch_{batch_number + 1}_results.csv",
-                    mime="text/csv",
-                )
-                st.markdown("---")
-
-            # Cumulative results download
-            st.write("All batches processed! Here's the complete result:")
-            st.dataframe(cumulative_results_df)
-
-            cumulative_csv = cumulative_results_df.to_csv(index=False)
+            # Batch-specific CSV download
+            csv_batch = batch_df.to_csv(index=False)
             st.download_button(
-                label="Download Complete Results as CSV",
-                data=cumulative_csv,
-                file_name="cumulative_lgbtq_analysis_results.csv",
+                label=f"Download Batch {batch_number + 1} Results as CSV",
+                data=csv_batch,
+                file_name=f"batch_{batch_number + 1}_results.csv",
                 mime="text/csv",
             )
-    except Exception as e:
-        st.error(f"Error processing the uploaded file: {e}")
+            st.markdown("---")
+
+        # Cumulative results download
+        st.write("All batches processed! Here's the complete result:")
+        st.dataframe(st.session_state.cumulative_results)
+
+        cumulative_csv = st.session_state.cumulative_results.to_csv(index=False)
+        st.download_button(
+            label="Download Complete Results as CSV",
+            data=cumulative_csv,
+            file_name="cumulative_lgbtq_analysis_results.csv",
+            mime="text/csv",
+        )
 else:
     st.info("Please upload a CSV file to proceed.")
