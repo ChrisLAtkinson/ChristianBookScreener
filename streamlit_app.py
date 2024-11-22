@@ -28,7 +28,6 @@ def fetch_synopsis_with_gpt(book_title, max_retries=3):
     Returns:
         The synopsis if successful, otherwise an error message.
     """
-
     for retry_count in range(max_retries):
         try:
             prompt = f"Provide a short synopsis for the book titled '{book_title}'."
@@ -58,7 +57,6 @@ def analyze_lgbtq_content(text):
     Returns:
         True if LGBTQ keywords are found, False otherwise.
     """
-
     if not text:
         return False
     lower_text = text.lower()
@@ -77,7 +75,6 @@ def process_batch(titles_batch):
     Returns:
         A list of dictionaries containing title, synopsis, and LGBTQ content flag.
     """
-
     results = []
     for title in titles_batch:
         synopsis = fetch_synopsis_with_gpt(title)
@@ -110,18 +107,49 @@ if uploaded_file:
             batch_size = 100
             batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
+            # Initialize a cumulative results list
+            cumulative_results = []
+
             for batch_number, batch in enumerate(batches):
                 st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
-                with st.spinner("Processing titles..."):
-                    batch_results = process_batch(batch)
 
+                # Initialize progress bar
+                progress = st.progress(0)
+                batch_results = []
+
+                # Process each title in the batch
+                for i, title in enumerate(batch):
+                    synopsis = fetch_synopsis_with_gpt(title)  # Fetch synopsis
+                    has_lgbtq_content = analyze_lgbtq_content(synopsis)  # Analyze LGBTQ content
+                    batch_results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
+
+                    # Update progress bar
+                    progress.progress((i + 1) / len(batch))
+
+                # Add batch results to cumulative results
+                cumulative_results.extend(batch_results)
+
+                # Display results for the current batch
                 batch_df = pd.DataFrame(batch_results)
                 st.write(f"Batch {batch_number + 1} results:")
                 st.dataframe(batch_df)
 
-                # ... (add download button for batch results)
+                # Separator between batches
+                st.markdown("---")
 
-            # ... (add download button for cumulative results)
+            # Show cumulative results
+            cumulative_df = pd.DataFrame(cumulative_results)
+            st.write("All batches processed! Here's the complete result:")
+            st.dataframe(cumulative_df)
+
+            # Add a download button for cumulative results
+            csv = cumulative_df.to_csv(index=False)
+            st.download_button(
+                label="Download Complete Results as CSV",
+                data=csv,
+                file_name="lgbtq_analysis_results.csv",
+                mime="text/csv",
+            )
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
