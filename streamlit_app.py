@@ -183,27 +183,29 @@ if uploaded_file:
         start_batch = st.selectbox("Select the starting batch:", options=list(range(1, len(batches) + 1)), index=0)
         start_batch_index = start_batch - 1
 
-        # Cumulative progress bar
-        total_titles = len(titles)
-        if total_titles > 0:
-            normalized_progress = min(st.session_state.cumulative_progress / total_titles, 1.0)
-            st.progress(normalized_progress)
-        else:
-            st.progress(0.0)
+        # Start button
+        if st.button("Start Processing"):
+            # Cumulative progress bar
+            total_titles = len(titles)
+            if total_titles > 0:
+                normalized_progress = min(st.session_state.cumulative_progress / total_titles, 1.0)
+                st.progress(normalized_progress)
+            else:
+                st.progress(0.0)
 
-        for i, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-            st.write(f"Processing Batch {i + 1} of {len(batches)}:")
-            process_batch(i, batch)
+            for i, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
+                st.write(f"Processing Batch {i + 1} of {len(batches)}:")
+                process_batch(i, batch)
 
-            # Display batch results
-            st.write(f"Batch {i + 1} results:")
-            st.dataframe(st.session_state.results)
+                # Display batch results
+                st.write(f"Batch {i + 1} results:")
+                st.dataframe(st.session_state.results)
 
-        # Download cumulative results
-        cumulative_csv_data = st.session_state.results.to_csv(index=False)
-        st.download_button(
-            label="Download All Results",
-            data=cumulative_csv_data,
-            file_name="cumulative_lgbtq_analysis_results.csv",
-            mime="text/csv",
-        )
+            # Download cumulative results
+            cumulative_csv_data = st.session_state.results.to_csv(index=False)
+            st.download_button(
+                label="Download All Results",
+                data=cumulative_csv_data,
+                file_name="cumulative_lgbtq_analysis_results.csv",
+                mime="text/csv",
+            )
