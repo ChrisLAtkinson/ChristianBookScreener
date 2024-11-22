@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI, RateLimitError
 import time
+import requests
+from bs4 import BeautifulSoup
 
 # Ensure OpenAI API key is loaded from Streamlit secrets
 try:
@@ -14,23 +16,37 @@ except KeyError:
     )
     st.stop()
 
-# Expanded LGBTQ Keywords for analysis
+# LGBTQ Keywords for analysis (expanded)
 LGBTQ_KEYWORDS = [
     "LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
     "LGBT", "homosexual", "dads", "moms", "parents", "family", "pride", "same-sex"
 ]
 
-def fetch_synopsis_with_gpt(book_title, max_retries=3):
+def search_qbd_online(title):
     """
-    Fetches a book synopsis using OpenAI GPT API with retry logic.
+    Searches the Queer Books Database online for the given book title.
 
     Args:
-        book_title: The title of the book.
-        max_retries: The maximum number of retries in case of rate limits.
+        title: The book title to search.
 
     Returns:
-        The synopsis if successful, otherwise an error message.
+        True if the book exists in the database, False otherwise.
     """
+    try:
+        url = "https://qbdatabase.wpcomstaging.com/"
+        response = requests.get(url, params={"s": title})  # Use the search parameter
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            results = soup.find_all("article")
+            for result in results:
+                if title.lower() in result.text.lower():
+                    return True
+        return False
+    except Exception as e:
+        st.warning(f"Error searching Queer Books Database: {e}")
+        return False
+
+def fetch_synopsis_with_gpt(book_title, max_retries=3):
     for retry_count in range(max_retries):
         try:
             prompt = f"Provide a short synopsis for the book titled '{book_title}'."
@@ -51,16 +67,6 @@ def fetch_synopsis_with_gpt(book_title, max_retries=3):
     return "Failed to fetch synopsis after multiple attempts."
 
 def fetch_reviews_with_gpt(book_title, max_retries=3):
-    """
-    Fetches a review for a book using OpenAI GPT API with retry logic.
-
-    Args:
-        book_title: The title of the book.
-        max_retries: The maximum number of retries in case of rate limits.
-
-    Returns:
-        The review if successful, otherwise an error message.
-    """
     for retry_count in range(max_retries):
         try:
             prompt = (
@@ -84,15 +90,6 @@ def fetch_reviews_with_gpt(book_title, max_retries=3):
     return "Failed to fetch review after multiple attempts."
 
 def analyze_lgbtq_content(text):
-    """
-    Analyzes the text for LGBTQ keywords.
-
-    Args:
-        text: The text to analyze.
-
-    Returns:
-        True if LGBTQ keywords are found, False otherwise.
-    """
     if not text:
         return False
     lower_text = text.lower()
@@ -102,27 +99,27 @@ def analyze_lgbtq_content(text):
     return False
 
 def process_batch(titles_batch):
-    """
-    Processes a batch of titles by fetching synopses, reviews, and analyzing LGBTQ content.
-
-    Args:
-        titles_batch: A list of book titles.
-
-    Returns:
-        A list of dictionaries containing title, synopsis, review, and LGBTQ content flag.
-    """
     results = []
     for title in titles_batch:
-        synopsis = fetch_synopsis_with_gpt(title)
-        review = fetch_reviews_with_gpt(title)
-        combined_text = f"{synopsis} {review}"  # Combine synopsis and review for analysis
-        has_lgbtq_content = analyze_lgbtq_content(combined_text)
-        results.append({
-            "Title": title,
-            "Synopsis": synopsis,
-            "Review": review,
-            "LGBTQ Content": has_lgbtq_content
-        })
+        # Check online database first
+        if search_qbd_online(title):
+            results.append({
+                "Title": title,
+                "Synopsis": "Identified via Queer Books Database",
+                "Review": "Identified via Queer Books Database",
+                "LGBTQ Content": True
+            })
+        else:
+            synopsis = fetch_synopsis_with_gpt(title)
+            review = fetch_reviews_with_gpt(title)
+            combined_text = f"{synopsis} {review}"
+            has_lgbtq_content = analyze_lgbtq_content(combined_text)
+            results.append({
+                "Title": title,
+                "Synopsis": synopsis,
+                "Review": review,
+                "LGBTQ Content": has_lgbtq_content
+            })
     return results
 
 # Streamlit app UI
@@ -130,7 +127,8 @@ st.title("LGBTQ Book Identifier with OpenAI GPT")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters by scanning synopses and reviews, processing in batches of 100 titles.
+    The app will analyze each title to identify LGBTQ themes or characters by searching online databases
+    and analyzing synopses and reviews, processing in batches of 100 titles.
     """
 )
 
@@ -150,49 +148,23 @@ if uploaded_file:
             batch_size = 100
             batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-            # Initialize a cumulative results list
             cumulative_results = []
-
             for batch_number, batch in enumerate(batches):
                 st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
-
-                # Initialize progress bar
                 progress = st.progress(0)
                 batch_results = []
 
-                # Process each title in the batch
                 for i, title in enumerate(batch):
-                    synopsis = fetch_synopsis_with_gpt(title)
-                    review = fetch_reviews_with_gpt(title)
-                    combined_text = f"{synopsis} {review}"
-                    has_lgbtq_content = analyze_lgbtq_content(combined_text)
-                    batch_results.append({
-                        "Title": title,
-                        "Synopsis": synopsis,
-                        "Review": review,
-                        "LGBTQ Content": has_lgbtq_content
-                    })
-
-                    # Update progress bar
+                    batch_results.extend(process_batch([title]))
                     progress.progress((i + 1) / len(batch))
 
-                # Add batch results to cumulative results
                 cumulative_results.extend(batch_results)
-
-                # Display results for the current batch
-                batch_df = pd.DataFrame(batch_results)
-                st.write(f"Batch {batch_number + 1} results:")
-                st.dataframe(batch_df)
-
-                # Separator between batches
                 st.markdown("---")
 
-            # Show cumulative results
             cumulative_df = pd.DataFrame(cumulative_results)
             st.write("All batches processed! Here's the complete result:")
             st.dataframe(cumulative_df)
 
-            # Add a download button for cumulative results
             csv = cumulative_df.to_csv(index=False)
             st.download_button(
                 label="Download Complete Results as CSV",
@@ -200,7 +172,6 @@ if uploaded_file:
                 file_name="lgbtq_analysis_results.csv",
                 mime="text/csv",
             )
-
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
 else:
