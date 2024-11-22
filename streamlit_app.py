@@ -16,7 +16,7 @@ except KeyError:
     )
     st.stop()
 
-# LGBTQ Keywords for analysis (expanded)
+# LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = [
     "LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
     "LGBT", "homosexual", "dads", "moms", "parents", "family", "pride", "same-sex"
@@ -123,7 +123,7 @@ def process_batch(titles_batch):
     return results
 
 # Streamlit app UI
-st.title("LGBTQ Book Identifier with OpenAI GPT")
+st.title("LGBTQ Book Identifier")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
@@ -158,20 +158,38 @@ if uploaded_file:
                     batch_results.extend(process_batch([title]))
                     progress.progress((i + 1) / len(batch))
 
+                # Add batch results to cumulative results
                 cumulative_results.extend(batch_results)
+
+                # Display batch results
+                batch_df = pd.DataFrame(batch_results)
+                st.write(f"Batch {batch_number + 1} results:")
+                st.dataframe(batch_df)
+
+                # Add download button for batch
+                csv = batch_df.to_csv(index=False)
+                st.download_button(
+                    label=f"Download Batch {batch_number + 1} Results as CSV",
+                    data=csv,
+                    file_name=f"batch_{batch_number + 1}_results.csv",
+                    mime="text/csv",
+                )
                 st.markdown("---")
 
+            # Show cumulative results
             cumulative_df = pd.DataFrame(cumulative_results)
             st.write("All batches processed! Here's the complete result:")
             st.dataframe(cumulative_df)
 
+            # Add a download button for cumulative results
             csv = cumulative_df.to_csv(index=False)
             st.download_button(
                 label="Download Complete Results as CSV",
                 data=csv,
-                file_name="lgbtq_analysis_results.csv",
+                file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
             )
+
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
 else:
