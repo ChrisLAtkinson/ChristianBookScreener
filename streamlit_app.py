@@ -181,21 +181,24 @@ if uploaded_file:
             batch_size = 100
             batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-            cumulative_results = []
+            # Initialize cumulative results DataFrame
+            cumulative_results_df = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
+
             for batch_number, batch in enumerate(batches):
                 st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
                 progress = st.progress(0)
-                batch_results = []
+                batch_results = process_batch(batch)
 
-                for i, title in enumerate(batch):
-                    batch_results.extend(process_batch([title]))
-                    progress.progress((i + 1) / len(batch))
+                # Convert batch results to DataFrame
+                batch_df = pd.DataFrame(batch_results)
 
-                # Add batch results to cumulative results
-                cumulative_results.extend(batch_results)
+                # Append batch results to cumulative results
+                cumulative_results_df = pd.concat([cumulative_results_df, batch_df], ignore_index=True)
+
+                # Update progress
+                progress.progress(1.0)
 
                 # Display batch results
-                batch_df = pd.DataFrame(batch_results)
                 st.write(f"Batch {batch_number + 1} results:")
                 st.dataframe(batch_df)
 
@@ -209,16 +212,15 @@ if uploaded_file:
                 )
                 st.markdown("---")
 
-            # Show cumulative results
-            cumulative_df = pd.DataFrame(cumulative_results)
+            # Display cumulative results
             st.write("All batches processed! Here's the complete result:")
-            st.dataframe(cumulative_df)
+            st.dataframe(cumulative_results_df)
 
             # Add a download button for cumulative results
-            csv = cumulative_df.to_csv(index=False)
+            cumulative_csv = cumulative_results_df.to_csv(index=False)
             st.download_button(
                 label="Download Complete Results as CSV",
-                data=csv,
+                data=cumulative_csv,
                 file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
             )
