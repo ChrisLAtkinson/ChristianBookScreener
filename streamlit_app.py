@@ -33,8 +33,8 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
-if "progress" not in st.session_state:
-    st.session_state.progress = 0  # Persistent progress tracking
+if "cumulative_progress" not in st.session_state:
+    st.session_state.cumulative_progress = 0  # Persistent cumulative progress tracking
 
 def search_qbd_online(title):
     try:
@@ -110,12 +110,14 @@ def analyze_lgbtq_content(text):
 
 def process_batch(batch_number, titles):
     """
-    Processes a batch of titles.
+    Processes a batch of titles with a batch-specific progress bar.
     """
     if batch_number in st.session_state.processed_batches:
         return  # Skip already processed batches
 
+    batch_progress = st.progress(0)  # Batch-specific progress bar
     results = []
+
     for idx, title in enumerate(titles):
         if search_qbd_online(title):
             results.append({
@@ -146,9 +148,9 @@ def process_batch(batch_number, titles):
                 "Confidence Level": "Low (GPT)"
             })
 
-        # Update progress
-        st.session_state.progress += 1 / len(titles)
-        st.progress(st.session_state.progress)
+        # Update progress for both batch and cumulative
+        batch_progress.progress((idx + 1) / len(titles))
+        st.session_state.cumulative_progress += 1 / len(titles)
 
     # Save results to session state
     batch_df = pd.DataFrame(results)
@@ -168,11 +170,14 @@ if uploaded_file:
         batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        # Display progress bar
-        st.progress(st.session_state.progress)
+        # Cumulative progress bar
+        st.progress(st.session_state.cumulative_progress)
 
         for i, batch in enumerate(batches):
+            st.write(f"Processing Batch {i + 1} of {len(batches)}:")
             process_batch(i, batch)
+
+            # Display batch results
             st.write(f"Batch {i + 1} results:")
             st.dataframe(st.session_state.results)
 
