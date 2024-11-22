@@ -14,8 +14,11 @@ except KeyError:
     )
     st.stop()
 
-# LGBTQ Keywords for analysis
-LGBTQ_KEYWORDS = ["LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual", "LGBT"]
+# Expanded LGBTQ Keywords for analysis
+LGBTQ_KEYWORDS = [
+    "LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
+    "LGBT", "homosexual", "dads", "moms", "parents", "family", "pride", "same-sex"
+]
 
 def fetch_synopsis_with_gpt(book_title, max_retries=3):
     """
@@ -47,6 +50,39 @@ def fetch_synopsis_with_gpt(book_title, max_retries=3):
             time.sleep(wait_time)
     return "Failed to fetch synopsis after multiple attempts."
 
+def fetch_reviews_with_gpt(book_title, max_retries=3):
+    """
+    Fetches a review for a book using OpenAI GPT API with retry logic.
+
+    Args:
+        book_title: The title of the book.
+        max_retries: The maximum number of retries in case of rate limits.
+
+    Returns:
+        The review if successful, otherwise an error message.
+    """
+    for retry_count in range(max_retries):
+        try:
+            prompt = (
+                f"Provide the most in-depth, critical review available for the book titled '{book_title}'. "
+                "Focus on themes, character development, and audience reception."
+            )
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=300,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
+        except RateLimitError as e:
+            wait_time = 2 ** retry_count
+            st.warning(f"Rate limit exceeded, retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+    return "Failed to fetch review after multiple attempts."
+
 def analyze_lgbtq_content(text):
     """
     Analyzes the text for LGBTQ keywords.
@@ -67,19 +103,26 @@ def analyze_lgbtq_content(text):
 
 def process_batch(titles_batch):
     """
-    Processes a batch of titles by fetching synopses and analyzing LGBTQ content.
+    Processes a batch of titles by fetching synopses, reviews, and analyzing LGBTQ content.
 
     Args:
         titles_batch: A list of book titles.
 
     Returns:
-        A list of dictionaries containing title, synopsis, and LGBTQ content flag.
+        A list of dictionaries containing title, synopsis, review, and LGBTQ content flag.
     """
     results = []
     for title in titles_batch:
         synopsis = fetch_synopsis_with_gpt(title)
-        has_lgbtq_content = analyze_lgbtq_content(synopsis)
-        results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
+        review = fetch_reviews_with_gpt(title)
+        combined_text = f"{synopsis} {review}"  # Combine synopsis and review for analysis
+        has_lgbtq_content = analyze_lgbtq_content(combined_text)
+        results.append({
+            "Title": title,
+            "Synopsis": synopsis,
+            "Review": review,
+            "LGBTQ Content": has_lgbtq_content
+        })
     return results
 
 # Streamlit app UI
@@ -87,7 +130,7 @@ st.title("LGBTQ Book Identifier with OpenAI GPT")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters, processing in batches of 100 titles.
+    The app will analyze each title to identify LGBTQ themes or characters by scanning synopses and reviews, processing in batches of 100 titles.
     """
 )
 
@@ -119,9 +162,16 @@ if uploaded_file:
 
                 # Process each title in the batch
                 for i, title in enumerate(batch):
-                    synopsis = fetch_synopsis_with_gpt(title)  # Fetch synopsis
-                    has_lgbtq_content = analyze_lgbtq_content(synopsis)  # Analyze LGBTQ content
-                    batch_results.append({"Title": title, "Synopsis": synopsis, "LGBTQ Content": has_lgbtq_content})
+                    synopsis = fetch_synopsis_with_gpt(title)
+                    review = fetch_reviews_with_gpt(title)
+                    combined_text = f"{synopsis} {review}"
+                    has_lgbtq_content = analyze_lgbtq_content(combined_text)
+                    batch_results.append({
+                        "Title": title,
+                        "Synopsis": synopsis,
+                        "Review": review,
+                        "LGBTQ Content": has_lgbtq_content
+                    })
 
                     # Update progress bar
                     progress.progress((i + 1) / len(batch))
