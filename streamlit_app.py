@@ -113,8 +113,8 @@ def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         return  # Skip already processed batches
 
-    batch_progress = st.progress(0)  # Batch-specific progress bar
     results = []
+    batch_progress = st.progress(0)  # Initialize batch progress bar
 
     for idx, title in enumerate(titles):
         if search_qbd_online(title):
@@ -146,7 +146,7 @@ def process_batch(batch_number, titles):
                 "Confidence Level": "Low (GPT)"
             })
 
-        # Update progress for the batch
+        # Update progress bar dynamically
         batch_progress.progress((idx + 1) / len(titles))
 
     batch_df = pd.DataFrame(results)
@@ -171,7 +171,7 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500  # Increased batch size to 500
+        batch_size = 500  # Batch size set to 500
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
         # Dropdown for starting batch
