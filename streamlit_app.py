@@ -16,10 +16,19 @@ except KeyError:
     )
     st.stop()
 
-# LGBTQ Keywords for analysis
+# LGBTQ Keywords for analysis (expanded)
 LGBTQ_KEYWORDS = [
-    "LGBTQ", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
-    "LGBT", "homosexual", "dads", "moms", "parents", "family", "pride", "same-sex"
+    "LGBTQ", "LGBT", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
+    "homosexual", "same-sex", "same-gender", "two-spirit", "genderqueer", "intersex",
+    "asexual", "aromantic", "gender non-conforming", "pansexual", "genderfluid",
+    "drag queen", "drag king", "polyamorous", "coming out", "rainbow family",
+    "chosen family", "queer representation", "gender dysphoria", "pride",
+    "sexual orientation", "gender identity", "androgynous", "LGBTQ themes",
+    "inclusive love", "non-heteronormative", "rainbow flag", "gay dads", "lesbian moms",
+    "queer relationships", "LGBTQIA", "gender affirmation", "non-cisgender",
+    "sapphic", "wlw", "mlm", "gender transition", "closeted", "allies", "pride month",
+    "rainbow literature", "queer literature", "gender spectrum", "fluid gender",
+    "identity exploration", "sexual fluidity", "trans rights", "two dads", "two moms"
 ]
 
 def search_qbd_online(title):
@@ -90,6 +99,15 @@ def fetch_reviews_with_gpt(book_title, max_retries=3):
     return "Failed to fetch review after multiple attempts."
 
 def analyze_lgbtq_content(text):
+    """
+    Analyzes the text for LGBTQ keywords.
+
+    Args:
+        text: The text to analyze.
+
+    Returns:
+        True if LGBTQ keywords are found, False otherwise.
+    """
     if not text:
         return False
     lower_text = text.lower()
@@ -99,27 +117,42 @@ def analyze_lgbtq_content(text):
     return False
 
 def process_batch(titles_batch):
+    """
+    Processes a batch of titles by prioritizing searches in QBD and analyzing content with GPT if needed.
+
+    Args:
+        titles_batch: List of book titles.
+
+    Returns:
+        List of results containing title, synopsis, review, LGBTQ content flag, and confidence level.
+    """
     results = []
     for title in titles_batch:
-        # Check online database first
+        # Step 1: Check QBD
         if search_qbd_online(title):
             results.append({
                 "Title": title,
                 "Synopsis": "Identified via Queer Books Database",
                 "Review": "Identified via Queer Books Database",
-                "LGBTQ Content": True
+                "LGBTQ Content": True,
+                "Confidence Level": "High (Verified by QBD)"
             })
-        else:
-            synopsis = fetch_synopsis_with_gpt(title)
-            review = fetch_reviews_with_gpt(title)
-            combined_text = f"{synopsis} {review}"
-            has_lgbtq_content = analyze_lgbtq_content(combined_text)
-            results.append({
-                "Title": title,
-                "Synopsis": synopsis,
-                "Review": review,
-                "LGBTQ Content": has_lgbtq_content
-            })
+            continue  # Skip GPT analysis if found in QBD
+
+        # Step 2: Analyze with GPT
+        synopsis = fetch_synopsis_with_gpt(title)
+        review = fetch_reviews_with_gpt(title)
+        combined_text = f"{synopsis} {review}"
+        has_lgbtq_content = analyze_lgbtq_content(combined_text)
+        confidence = "Moderate (GPT and keyword analysis)" if has_lgbtq_content else "Low (No strong evidence)"
+        
+        results.append({
+            "Title": title,
+            "Synopsis": synopsis,
+            "Review": review,
+            "LGBTQ Content": has_lgbtq_content,
+            "Confidence Level": confidence
+        })
     return results
 
 # Streamlit app UI
@@ -127,7 +160,7 @@ st.title("LGBTQ Book Identifier")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters by searching online databases
+    The app will analyze each title to identify LGBTQ themes or characters by prioritizing searches in online databases
     and analyzing synopses and reviews, processing in batches of 100 titles.
     """
 )
