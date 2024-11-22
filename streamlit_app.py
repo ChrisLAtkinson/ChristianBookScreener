@@ -150,7 +150,7 @@ def process_batch(batch_number, titles):
 
         # Update progress for both batch and cumulative
         batch_progress.progress((idx + 1) / len(titles))
-        st.session_state.cumulative_progress += 1 / len(titles)
+        st.session_state.cumulative_progress += 1
 
     # Save results to session state
     batch_df = pd.DataFrame(results)
@@ -184,7 +184,12 @@ if uploaded_file:
         start_batch_index = start_batch - 1
 
         # Cumulative progress bar
-        st.progress(st.session_state.cumulative_progress)
+        total_titles = len(titles)
+        if total_titles > 0:
+            normalized_progress = min(st.session_state.cumulative_progress / total_titles, 1.0)
+            st.progress(normalized_progress)
+        else:
+            st.progress(0.0)
 
         for i, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
             st.write(f"Processing Batch {i + 1} of {len(batches)}:")
