@@ -157,6 +157,15 @@ def process_batch(batch_number, titles):
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
+    # Download button for the batch
+    csv_data = batch_df.to_csv(index=False)
+    st.download_button(
+        label=f"Download Batch {batch_number + 1} Results",
+        data=csv_data,
+        file_name=f"batch_{batch_number + 1}_results.csv",
+        mime="text/csv",
+    )
+
 # UI
 st.title("LGBTQ Book Identifier")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
@@ -170,10 +179,14 @@ if uploaded_file:
         batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
+        # Dropdown to select starting batch
+        start_batch = st.selectbox("Select the starting batch:", options=list(range(1, len(batches) + 1)), index=0)
+        start_batch_index = start_batch - 1
+
         # Cumulative progress bar
         st.progress(st.session_state.cumulative_progress)
 
-        for i, batch in enumerate(batches):
+        for i, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
             st.write(f"Processing Batch {i + 1} of {len(batches)}:")
             process_batch(i, batch)
 
@@ -182,5 +195,10 @@ if uploaded_file:
             st.dataframe(st.session_state.results)
 
         # Download cumulative results
-        csv_data = st.session_state.results.to_csv(index=False)
-        st.download_button("Download All Results", csv_data, "lgbtq_analysis_results.csv", "text/csv")
+        cumulative_csv_data = st.session_state.results.to_csv(index=False)
+        st.download_button(
+            label="Download All Results",
+            data=cumulative_csv_data,
+            file_name="cumulative_lgbtq_analysis_results.csv",
+            mime="text/csv",
+        )
