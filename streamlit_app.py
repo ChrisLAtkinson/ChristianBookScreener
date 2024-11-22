@@ -33,11 +33,10 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
+if "progress" not in st.session_state:
+    st.session_state.progress = 0  # Persistent progress tracking
 
 def search_qbd_online(title):
-    """
-    Searches the Queer Books Database for a given title.
-    """
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
         response = requests.get(url, params={"s": title})
@@ -53,9 +52,6 @@ def search_qbd_online(title):
         return False
 
 def search_scholastic_online(title):
-    """
-    Searches Scholastic's Clubs database for a given title.
-    """
     try:
         url = "https://clubs.scholastic.com/search"
         response = requests.get(url, params={"q": title})
@@ -71,9 +67,6 @@ def search_scholastic_online(title):
         return False
 
 def fetch_synopsis_with_gpt(title):
-    """
-    Fetches a synopsis using OpenAI GPT.
-    """
     prompt = f"Provide a short synopsis for the book titled '{title}'."
     for _ in range(3):  # Retry logic
         try:
@@ -92,9 +85,6 @@ def fetch_synopsis_with_gpt(title):
     return "Failed to fetch synopsis."
 
 def fetch_reviews_with_gpt(title):
-    """
-    Fetches a detailed review using OpenAI GPT.
-    """
     prompt = f"Provide a detailed review of the book titled '{title}'. Focus on themes and audience reception."
     for _ in range(3):  # Retry logic
         try:
@@ -113,9 +103,6 @@ def fetch_reviews_with_gpt(title):
     return "Failed to fetch review."
 
 def analyze_lgbtq_content(text):
-    """
-    Analyzes text for LGBTQ-related keywords.
-    """
     if not text:
         return False
     text_lower = text.lower()
@@ -129,7 +116,7 @@ def process_batch(batch_number, titles):
         return  # Skip already processed batches
 
     results = []
-    for title in titles:
+    for idx, title in enumerate(titles):
         if search_qbd_online(title):
             results.append({
                 "Title": title,
@@ -138,9 +125,7 @@ def process_batch(batch_number, titles):
                 "LGBTQ Content": True,
                 "Confidence Level": "High (QBD)"
             })
-            continue
-
-        if search_scholastic_online(title):
+        elif search_scholastic_online(title):
             results.append({
                 "Title": title,
                 "Synopsis": "Identified via Scholastic",
@@ -148,20 +133,22 @@ def process_batch(batch_number, titles):
                 "LGBTQ Content": False,
                 "Confidence Level": "Moderate (Scholastic)"
             })
-            continue
+        else:
+            synopsis = fetch_synopsis_with_gpt(title)
+            review = fetch_reviews_with_gpt(title)
+            combined_text = f"{synopsis} {review}"
+            lgbtq_content = analyze_lgbtq_content(combined_text)
+            results.append({
+                "Title": title,
+                "Synopsis": synopsis,
+                "Review": review,
+                "LGBTQ Content": lgbtq_content,
+                "Confidence Level": "Low (GPT)"
+            })
 
-        synopsis = fetch_synopsis_with_gpt(title)
-        review = fetch_reviews_with_gpt(title)
-        content_combined = f"{synopsis} {review}"
-        lgbtq_content = analyze_lgbtq_content(content_combined)
-
-        results.append({
-            "Title": title,
-            "Synopsis": synopsis,
-            "Review": review,
-            "LGBTQ Content": lgbtq_content,
-            "Confidence Level": "Low (GPT)"
-        })
+        # Update progress
+        st.session_state.progress += 1 / len(titles)
+        st.progress(st.session_state.progress)
 
     # Save results to session state
     batch_df = pd.DataFrame(results)
@@ -180,6 +167,9 @@ if uploaded_file:
         titles = books["Title"].dropna().tolist()
         batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
+
+        # Display progress bar
+        st.progress(st.session_state.progress)
 
         for i, batch in enumerate(batches):
             process_batch(i, batch)
