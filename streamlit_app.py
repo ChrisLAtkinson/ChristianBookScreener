@@ -32,15 +32,6 @@ LGBTQ_KEYWORDS = [
 ]
 
 def search_qbd_online(title):
-    """
-    Searches the Queer Books Database online for the given book title.
-
-    Args:
-        title: The book title to search.
-
-    Returns:
-        True if the book exists in the database, False otherwise.
-    """
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
         response = requests.get(url, params={"s": title})  # Use the search parameter
@@ -99,15 +90,6 @@ def fetch_reviews_with_gpt(book_title, max_retries=3):
     return "Failed to fetch review after multiple attempts."
 
 def analyze_lgbtq_content(text):
-    """
-    Analyzes the text for LGBTQ keywords.
-
-    Args:
-        text: The text to analyze.
-
-    Returns:
-        True if LGBTQ keywords are found, False otherwise.
-    """
     if not text:
         return False
     lower_text = text.lower()
@@ -117,18 +99,8 @@ def analyze_lgbtq_content(text):
     return False
 
 def process_batch(titles_batch):
-    """
-    Processes a batch of titles by prioritizing searches in QBD and analyzing content with GPT if needed.
-
-    Args:
-        titles_batch: List of book titles.
-
-    Returns:
-        List of results containing title, synopsis, review, LGBTQ content flag, and confidence level.
-    """
     results = []
     for title in titles_batch:
-        # Step 1: Check QBD
         if search_qbd_online(title):
             results.append({
                 "Title": title,
@@ -137,15 +109,12 @@ def process_batch(titles_batch):
                 "LGBTQ Content": True,
                 "Confidence Level": "High (Verified by QBD)"
             })
-            continue  # Skip GPT analysis if found in QBD
-
-        # Step 2: Analyze with GPT
+            continue
         synopsis = fetch_synopsis_with_gpt(title)
         review = fetch_reviews_with_gpt(title)
         combined_text = f"{synopsis} {review}"
         has_lgbtq_content = analyze_lgbtq_content(combined_text)
         confidence = "Moderate (GPT and keyword analysis)" if has_lgbtq_content else "Low (No strong evidence)"
-        
         results.append({
             "Title": title,
             "Synopsis": synopsis,
@@ -155,13 +124,12 @@ def process_batch(titles_batch):
         })
     return results
 
-# Streamlit app UI
+# Streamlit app
 st.title("LGBTQ Book Identifier")
 st.markdown(
     """
     Upload a CSV file containing book titles (with a column named 'Title').
-    The app will analyze each title to identify LGBTQ themes or characters by prioritizing searches in online databases
-    and analyzing synopses and reviews, processing in batches of 100 titles.
+    The app will analyze each title to identify LGBTQ themes or characters.
     """
 )
 
@@ -177,32 +145,27 @@ if uploaded_file:
             titles = books["Title"].dropna().tolist()
             st.write(f"Found {len(titles)} book titles.")
 
-            # Process the titles in batches of 100
+            # Process titles in batches
             batch_size = 100
             batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-            # Initialize cumulative results DataFrame
             cumulative_results_df = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 
             for batch_number, batch in enumerate(batches):
                 st.write(f"Processing batch {batch_number + 1} of {len(batches)}...")
                 progress = st.progress(0)
-                batch_results = process_batch(batch)
+                batch_results = []
 
-                # Convert batch results to DataFrame
+                for i, title in enumerate(batch):
+                    batch_results.extend(process_batch([title]))
+                    progress.progress((i + 1) / len(batch))
+
                 batch_df = pd.DataFrame(batch_results)
-
-                # Append batch results to cumulative results
                 cumulative_results_df = pd.concat([cumulative_results_df, batch_df], ignore_index=True)
 
-                # Update progress
-                progress.progress(1.0)
-
-                # Display batch results
                 st.write(f"Batch {batch_number + 1} results:")
                 st.dataframe(batch_df)
 
-                # Add download button for batch
                 csv = batch_df.to_csv(index=False)
                 st.download_button(
                     label=f"Download Batch {batch_number + 1} Results as CSV",
@@ -212,11 +175,9 @@ if uploaded_file:
                 )
                 st.markdown("---")
 
-            # Display cumulative results
             st.write("All batches processed! Here's the complete result:")
             st.dataframe(cumulative_results_df)
 
-            # Add a download button for cumulative results
             cumulative_csv = cumulative_results_df.to_csv(index=False)
             st.download_button(
                 label="Download Complete Results as CSV",
@@ -224,7 +185,6 @@ if uploaded_file:
                 file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
             )
-
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
 else:
