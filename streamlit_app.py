@@ -148,6 +148,7 @@ def process_batch(batch_number, titles):
 
         # Update progress bar dynamically
         batch_progress.progress((idx + 1) / len(titles))
+        time.sleep(0.1)  # Simulated delay for visibility
 
     batch_df = pd.DataFrame(results)
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
