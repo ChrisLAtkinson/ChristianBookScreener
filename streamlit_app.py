@@ -16,7 +16,7 @@ except KeyError:
     )
     st.stop()
 
-# LGBTQ Keywords for analysis (expanded)
+# LGBTQ Keywords for analysis
 LGBTQ_KEYWORDS = [
     "LGBTQ", "LGBT", "gay", "lesbian", "transgender", "queer", "nonbinary", "bisexual",
     "homosexual", "same-sex", "same-gender", "two-spirit", "genderqueer", "intersex",
@@ -44,6 +44,21 @@ def search_qbd_online(title):
         return False
     except Exception as e:
         st.warning(f"Error searching Queer Books Database: {e}")
+        return False
+
+def search_scholastic_online(title):
+    try:
+        url = "https://clubs.scholastic.com/search"
+        response = requests.get(url, params={"q": title})  # Use the search parameter
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            results = soup.find_all("div", class_="product-tile")
+            for result in results:
+                if title.lower() in result.text.lower():
+                    return True
+        return False
+    except Exception as e:
+        st.warning(f"Error searching Scholastic Clubs Database: {e}")
         return False
 
 def fetch_synopsis_with_gpt(book_title, max_retries=3):
@@ -101,6 +116,7 @@ def analyze_lgbtq_content(text):
 def process_batch(titles_batch):
     results = []
     for title in titles_batch:
+        # Step 1: Check QBD
         if search_qbd_online(title):
             results.append({
                 "Title": title,
@@ -110,11 +126,25 @@ def process_batch(titles_batch):
                 "Confidence Level": "High (Verified by QBD)"
             })
             continue
+
+        # Step 2: Check Scholastic
+        if search_scholastic_online(title):
+            results.append({
+                "Title": title,
+                "Synopsis": "Identified via Scholastic Clubs Database",
+                "Review": "Identified via Scholastic Clubs Database",
+                "LGBTQ Content": False,  # Scholastic may not flag LGBTQ content explicitly
+                "Confidence Level": "Moderate (Verified by Scholastic)"
+            })
+            continue
+
+        # Step 3: Analyze with GPT
         synopsis = fetch_synopsis_with_gpt(title)
         review = fetch_reviews_with_gpt(title)
         combined_text = f"{synopsis} {review}"
         has_lgbtq_content = analyze_lgbtq_content(combined_text)
         confidence = "Moderate (GPT and keyword analysis)" if has_lgbtq_content else "Low (No strong evidence)"
+        
         results.append({
             "Title": title,
             "Synopsis": synopsis,
@@ -166,15 +196,17 @@ if uploaded_file:
                 st.write(f"Batch {batch_number + 1} results:")
                 st.dataframe(batch_df)
 
-                csv = batch_df.to_csv(index=False)
+                # Batch-specific CSV download
+                csv_batch = batch_df.to_csv(index=False)
                 st.download_button(
                     label=f"Download Batch {batch_number + 1} Results as CSV",
-                    data=csv,
+                    data=csv_batch,
                     file_name=f"batch_{batch_number + 1}_results.csv",
                     mime="text/csv",
                 )
                 st.markdown("---")
 
+            # Cumulative results download
             st.write("All batches processed! Here's the complete result:")
             st.dataframe(cumulative_results_df)
 
