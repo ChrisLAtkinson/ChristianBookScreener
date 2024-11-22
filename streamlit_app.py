@@ -33,8 +33,6 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
-if "cumulative_progress" not in st.session_state:
-    st.session_state.cumulative_progress = 0  # Persistent cumulative progress tracking
 
 def search_qbd_online(title):
     try:
@@ -110,15 +108,13 @@ def analyze_lgbtq_content(text):
 
 def process_batch(batch_number, titles):
     """
-    Processes a batch of titles with a batch-specific progress bar.
+    Processes a batch of titles and appends results to session state.
     """
     if batch_number in st.session_state.processed_batches:
         return  # Skip already processed batches
 
-    batch_progress = st.progress(0)  # Batch-specific progress bar
     results = []
-
-    for idx, title in enumerate(titles):
+    for title in titles:
         if search_qbd_online(title):
             results.append({
                 "Title": title,
@@ -148,20 +144,14 @@ def process_batch(batch_number, titles):
                 "Confidence Level": "Low (GPT)"
             })
 
-        # Update progress for both batch and cumulative
-        batch_progress.progress((idx + 1) / len(titles))
-        st.session_state.cumulative_progress += 1
-
-    # Save results to session state
     batch_df = pd.DataFrame(results)
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
-    # Download button for the batch
-    csv_data = batch_df.to_csv(index=False)
+    # Batch-specific download button
     st.download_button(
         label=f"Download Batch {batch_number + 1} Results",
-        data=csv_data,
+        data=batch_df.to_csv(index=False),
         file_name=f"batch_{batch_number + 1}_results.csv",
         mime="text/csv",
     )
@@ -179,33 +169,24 @@ if uploaded_file:
         batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        # Dropdown to select starting batch
-        start_batch = st.selectbox("Select the starting batch:", options=list(range(1, len(batches) + 1)), index=0)
+        # Dropdown for starting batch
+        start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
         start_batch_index = start_batch - 1
 
-        # Start button
+        # Start Processing Button
         if st.button("Start Processing"):
-            # Cumulative progress bar
-            total_titles = len(titles)
-            if total_titles > 0:
-                normalized_progress = min(st.session_state.cumulative_progress / total_titles, 1.0)
-                st.progress(normalized_progress)
-            else:
-                st.progress(0.0)
+            for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
+                st.write(f"Processing Batch {batch_number + 1} of {len(batches)}")
+                process_batch(batch_number, batch)
 
-            for i, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-                st.write(f"Processing Batch {i + 1} of {len(batches)}:")
-                process_batch(i, batch)
+        # Display cumulative results
+        st.write("Cumulative Results:")
+        st.dataframe(st.session_state.results)
 
-            # Display cumulative results
-            st.write("Cumulative Results:")
-            st.dataframe(st.session_state.results)
-
-            # Download cumulative results
-            cumulative_csv_data = st.session_state.results.to_csv(index=False)
-            st.download_button(
-                label="Download All Results",
-                data=cumulative_csv_data,
-                file_name="cumulative_lgbtq_analysis_results.csv",
-                mime="text/csv",
-            )
+        # Download cumulative results
+        st.download_button(
+            label="Download All Results",
+            data=st.session_state.results.to_csv(index=False),
+            file_name="cumulative_lgbtq_analysis_results.csv",
+            mime="text/csv",
+        )
