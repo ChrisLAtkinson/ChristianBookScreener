@@ -80,7 +80,7 @@ def fetch_synopsis_with_gpt(title):
         )
         return response.choices[0].message.content.strip()
     except RateLimitError:
-        return "Failed to fetch synopsis."
+        return "Failed to fetch synopsis due to rate limiting."
 
 def analyze_lgbtq_content(text):
     if not text:
@@ -174,7 +174,7 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 200  # Batch size changed to 200 titles
+        batch_size = 100  # Batch size changed back to 100 titles
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
         start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
