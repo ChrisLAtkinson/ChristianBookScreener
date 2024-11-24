@@ -56,7 +56,7 @@ def search_scholastic_online(title):
         response = requests.get(url, params={"q": title})
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
-            results = soup.find_all("div", class_="product-tile")
+            results = soup.find_all("div", "product-tile")
             for result in results:
                 if title.lower() in result.text.lower():
                     return True
@@ -126,7 +126,8 @@ def process_batch(batch_number, titles):
 
     st.write(f"Processing Batch {batch_number + 1}...")
 
-    batch_progress = st.progress(0)  # Batch-specific progress bar
+    # Create a progress bar for the current batch
+    batch_progress = st.progress(0)
     results = []
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -135,7 +136,7 @@ def process_batch(batch_number, titles):
             result = future.result()
             results.append(result)
 
-            # Update progress bar dynamically
+            # Update the progress bar dynamically
             batch_progress.progress((idx + 1) / len(titles))
 
     batch_df = pd.DataFrame(results)
