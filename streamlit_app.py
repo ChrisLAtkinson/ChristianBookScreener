@@ -35,8 +35,6 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
-if "processing_complete" not in st.session_state:
-    st.session_state.processing_complete = False
 
 def search_qbd_online(title):
     try:
@@ -66,7 +64,7 @@ def search_scholastic_online(title):
     except Exception:
         return False
 
-def fetch_synopsis_with_gpt(title, max_retries=3):
+def fetch_synopsis_with_gpt(title, max_retries=5):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
     for attempt in range(max_retries):
         try:
@@ -85,7 +83,7 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
             st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
             time.sleep(wait_time)
         except Exception as e:
-            st.error(f"Failed to fetch synopsis: {e}")
+            st.warning(f"Error fetching synopsis: {e}")
             break
     return "Failed to fetch synopsis after multiple attempts."
 
@@ -125,10 +123,10 @@ def process_title(title):
 
 def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
+        st.info(f"Batch {batch_number + 1} already processed.")
         return
 
     st.write(f"Processing Batch {batch_number + 1}...")
-
     batch_progress = st.progress(0)
     results = []
 
@@ -182,7 +180,7 @@ if uploaded_file:
                 process_batch(batch_index, batches[batch_index])
             st.success("Selected batches processed successfully.")
 
-        if st.session_state.results.shape[0] > 0:
+        if not st.session_state.results.empty:
             cumulative_df = st.session_state.results[
                 ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
             ]
