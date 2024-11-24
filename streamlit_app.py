@@ -170,14 +170,17 @@ if uploaded_file:
 
         st.write(f"Total Batches: {len(batches)}")
 
-        start_batch = st.selectbox("Select Batch to Start:", options=list(range(1, len(batches) + 1)))
-        start_batch_index = start_batch - 1
+        selected_batches = st.multiselect(
+            "Select Batches to Process:",
+            options=list(range(1, len(batches) + 1)),
+            format_func=lambda x: f"Batch {x}",
+        )
+        selected_batch_indices = [batch - 1 for batch in selected_batches]
 
-        if st.button("Process Selected Batch"):
-            if start_batch_index < len(batches):
-                process_batch(start_batch_index, batches[start_batch_index])
-            else:
-                st.error("Invalid batch selection.")
+        if st.button("Process Selected Batches"):
+            for batch_index in selected_batch_indices:
+                process_batch(batch_index, batches[batch_index])
+            st.success("Selected batches processed successfully.")
 
         if st.session_state.results.shape[0] > 0:
             cumulative_df = st.session_state.results[
