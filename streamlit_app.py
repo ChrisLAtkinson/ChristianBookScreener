@@ -35,6 +35,8 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
+if "current_batch" not in st.session_state:
+    st.session_state.current_batch = 0  # Start with the first batch
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False
 
@@ -81,7 +83,7 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
             )
             return response.choices[0].message.content.strip()
         except RateLimitError:
-            wait_time = (2 ** attempt) + random.uniform(0, 1)  # Exponential backoff
+            wait_time = (2 ** attempt) + random.uniform(0, 1)
             st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
             time.sleep(wait_time)
         except Exception as e:
@@ -165,16 +167,19 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500
+        batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
-        start_batch_index = start_batch - 1
+        st.write(f"Total Batches: {len(batches)}")
 
-        if st.button("Start Processing"):
-            for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-                process_batch(batch_number, batch)
-            st.session_state.processing_complete = True
+        if st.button("Process Next Batch"):
+            current_batch = st.session_state.current_batch
+            if current_batch < len(batches):
+                process_batch(current_batch, batches[current_batch])
+                st.session_state.current_batch += 1
+            else:
+                st.success("All batches have been processed.")
+                st.session_state.processing_complete = True
 
         if st.session_state.processing_complete:
             cumulative_df = st.session_state.results[
