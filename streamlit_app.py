@@ -4,7 +4,6 @@ from openai import OpenAI, RateLimitError
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
-import time
 
 # Initialize OpenAI API
 try:
@@ -34,6 +33,8 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
+if "processing_complete" not in st.session_state:
+    st.session_state.processing_complete = False  # Tracks if processing is done
 
 def search_qbd_online(title):
     try:
@@ -89,7 +90,6 @@ def process_title(title):
     """
     Processes a single title, combining database searches and GPT results.
     """
-    # Search databases first
     if search_qbd_online(title):
         return {
             "Title": title,
@@ -107,7 +107,6 @@ def process_title(title):
             "Confidence Level": "Moderate (Scholastic)"
         }
 
-    # If databases fail, use GPT
     synopsis = fetch_synopsis_with_gpt(title)
     lgbtq_content = analyze_lgbtq_content(synopsis)
     return {
@@ -125,27 +124,27 @@ def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         return  # Skip already processed batches
 
-    # Parallel processing of titles
-    results = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_title, title) for title in titles]
-        for idx, future in enumerate(concurrent.futures.as_completed(futures)):
-            results.append(future.result())
-            st.progress((idx + 1) / len(titles))  # Update progress dynamically
+    st.write(f"Processing Batch {batch_number + 1}...")
 
-    # Convert to DataFrame and ensure Title column is first
+    batch_progress = st.progress(0)
+    results = []
+
+    for idx, title in enumerate(titles):
+        result = process_title(title)
+        results.append(result)
+        batch_progress.progress((idx + 1) / len(titles))
+
     batch_df = pd.DataFrame(results)
     batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
-
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
-    # Batch-specific download button
     st.download_button(
         label=f"Download Batch {batch_number + 1} Results",
         data=batch_df.to_csv(index=False),
         file_name=f"batch_{batch_number + 1}_results.csv",
         mime="text/csv",
+        key=f"batch_{batch_number + 1}_download",  # Unique key
     )
 
 # UI
@@ -158,30 +157,29 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500  # Batch size set to 500
+        batch_size = 500  # Batch size
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        # Dropdown for starting batch
         start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
         start_batch_index = start_batch - 1
 
-        # Start Processing Button
         if st.button("Start Processing"):
             for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-                st.write(f"Processing Batch {batch_number + 1} of {len(batches)}")
                 process_batch(batch_number, batch)
 
-        # Display cumulative results
-        cumulative_df = st.session_state.results[
-            ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
-        ]
-        st.write("Cumulative Results:")
-        st.dataframe(cumulative_df)
+            st.session_state.processing_complete = True
 
-        # Download cumulative results
-        st.download_button(
-            label="Download All Results",
-            data=cumulative_df.to_csv(index=False),
-            file_name="cumulative_lgbtq_analysis_results.csv",
-            mime="text/csv",
-        )
+        if st.session_state.processing_complete:
+            cumulative_df = st.session_state.results[
+                ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
+            ]
+            st.write("Cumulative Results:")
+            st.dataframe(cumulative_df)
+
+            st.download_button(
+                label="Download All Results",
+                data=cumulative_df.to_csv(index=False),
+                file_name="cumulative_lgbtq_analysis_results.csv",
+                mime="text/csv",
+                key="cumulative_download",  # Unique key
+            )
