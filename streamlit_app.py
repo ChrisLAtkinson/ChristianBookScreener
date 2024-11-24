@@ -142,7 +142,7 @@ def process_batch(batch_number, titles):
             batch_progress.progress((idx + 1) / len(titles))
 
     batch_df = pd.DataFrame(results)
-    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
+    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]  # Ensure Title is first
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
@@ -150,7 +150,7 @@ def process_batch(batch_number, titles):
     st.write(f"Batch {batch_number + 1} Results:")
     st.dataframe(batch_df)
 
-    # Prepare CSV for download
+    # Prepare CSV for download, ensuring Title is first
     csv = batch_df.to_csv(index=False).encode('utf-8')
     st.session_state.batch_csvs[batch_number] = csv
 
@@ -179,7 +179,7 @@ if uploaded_file:
         if st.session_state.processing_complete:
             cumulative_df = st.session_state.results[
                 ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
-            ]
+            ]  # Ensure 'Title' is first in the list
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
 
@@ -194,7 +194,7 @@ if uploaded_file:
                         key=f"batch_{batch_number + 1}_download",
                     )
 
-            # Download all results
+            # Download all results, ensuring Title remains first
             st.download_button(
                 label="Download All Results",
                 data=cumulative_df.to_csv(index=False).encode('utf-8'),
