@@ -3,6 +3,7 @@ import pandas as pd
 from openai import OpenAI, RateLimitError
 import requests
 from bs4 import BeautifulSoup
+import concurrent.futures
 import time
 
 # Initialize OpenAI API
@@ -46,7 +47,6 @@ def search_qbd_online(title):
                     return True
         return False
     except Exception as e:
-        st.warning(f"Error searching QBD: {e}")
         return False
 
 def search_scholastic_online(title):
@@ -61,44 +61,23 @@ def search_scholastic_online(title):
                     return True
         return False
     except Exception as e:
-        st.warning(f"Error searching Scholastic: {e}")
         return False
 
 def fetch_synopsis_with_gpt(title):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
-    for _ in range(3):  # Retry logic
-        try:
-            response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=150,
-                temperature=0.7,
-            )
-            return response.choices[0].message.content.strip()
-        except RateLimitError:
-            time.sleep(2)  # Backoff
-    return "Failed to fetch synopsis."
-
-def fetch_reviews_with_gpt(title):
-    prompt = f"Provide a detailed review of the book titled '{title}'. Focus on themes and audience reception."
-    for _ in range(3):  # Retry logic
-        try:
-            response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=300,
-                temperature=0.7,
-            )
-            return response.choices[0].message.content.strip()
-        except RateLimitError:
-            time.sleep(2)  # Backoff
-    return "Failed to fetch review."
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=150,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except RateLimitError:
+        return "Failed to fetch synopsis."
 
 def analyze_lgbtq_content(text):
     if not text:
@@ -106,51 +85,58 @@ def analyze_lgbtq_content(text):
     text_lower = text.lower()
     return any(keyword.lower() in text_lower for keyword in LGBTQ_KEYWORDS)
 
+def process_title(title):
+    """
+    Processes a single title, combining database searches and GPT results.
+    """
+    # Search databases first
+    if search_qbd_online(title):
+        return {
+            "Title": title,
+            "Synopsis": "Identified via QBD",
+            "Review": "Identified via QBD",
+            "LGBTQ Content": True,
+            "Confidence Level": "High (QBD)"
+        }
+    if search_scholastic_online(title):
+        return {
+            "Title": title,
+            "Synopsis": "Identified via Scholastic",
+            "Review": "Identified via Scholastic",
+            "LGBTQ Content": False,
+            "Confidence Level": "Moderate (Scholastic)"
+        }
+
+    # If databases fail, use GPT
+    synopsis = fetch_synopsis_with_gpt(title)
+    lgbtq_content = analyze_lgbtq_content(synopsis)
+    return {
+        "Title": title,
+        "Synopsis": synopsis,
+        "Review": "",
+        "LGBTQ Content": lgbtq_content,
+        "Confidence Level": "Low (GPT)"
+    }
+
 def process_batch(batch_number, titles):
     """
-    Processes a batch of titles and updates a batch-specific progress bar.
+    Processes a batch of titles using parallel processing for efficiency.
     """
     if batch_number in st.session_state.processed_batches:
         return  # Skip already processed batches
 
+    # Parallel processing of titles
     results = []
-    batch_progress = st.progress(0)  # Initialize batch progress bar
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_title, title) for title in titles]
+        for idx, future in enumerate(concurrent.futures.as_completed(futures)):
+            results.append(future.result())
+            st.progress((idx + 1) / len(titles))  # Update progress dynamically
 
-    for idx, title in enumerate(titles):
-        if search_qbd_online(title):
-            results.append({
-                "Title": title,
-                "Synopsis": "Identified via QBD",
-                "Review": "Identified via QBD",
-                "LGBTQ Content": True,
-                "Confidence Level": "High (QBD)"
-            })
-        elif search_scholastic_online(title):
-            results.append({
-                "Title": title,
-                "Synopsis": "Identified via Scholastic",
-                "Review": "Identified via Scholastic",
-                "LGBTQ Content": False,
-                "Confidence Level": "Moderate (Scholastic)"
-            })
-        else:
-            synopsis = fetch_synopsis_with_gpt(title)
-            review = fetch_reviews_with_gpt(title)
-            combined_text = f"{synopsis} {review}"
-            lgbtq_content = analyze_lgbtq_content(combined_text)
-            results.append({
-                "Title": title,
-                "Synopsis": synopsis,
-                "Review": review,
-                "LGBTQ Content": lgbtq_content,
-                "Confidence Level": "Low (GPT)"
-            })
-
-        # Update progress bar dynamically
-        batch_progress.progress((idx + 1) / len(titles))
-        time.sleep(0.1)  # Simulated delay for visibility
-
+    # Convert to DataFrame and ensure Title column is first
     batch_df = pd.DataFrame(results)
+    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
+
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
@@ -186,13 +172,16 @@ if uploaded_file:
                 process_batch(batch_number, batch)
 
         # Display cumulative results
+        cumulative_df = st.session_state.results[
+            ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
+        ]
         st.write("Cumulative Results:")
-        st.dataframe(st.session_state.results)
+        st.dataframe(cumulative_df)
 
         # Download cumulative results
         st.download_button(
             label="Download All Results",
-            data=st.session_state.results.to_csv(index=False),
+            data=cumulative_df.to_csv(index=False),
             file_name="cumulative_lgbtq_analysis_results.csv",
             mime="text/csv",
         )
