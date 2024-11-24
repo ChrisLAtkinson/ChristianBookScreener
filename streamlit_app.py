@@ -35,6 +35,8 @@ if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False  # Tracks if processing is done
+if "batch_csvs" not in st.session_state:
+    st.session_state.batch_csvs = {}  # Store CSVs for download
 
 def search_qbd_online(title):
     try:
@@ -148,15 +150,9 @@ def process_batch(batch_number, titles):
     st.write(f"Batch {batch_number + 1} Results:")
     st.dataframe(batch_df)
 
-    # Ensure Title is the first column in CSV
-    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
-    st.download_button(
-        label=f"Download Batch {batch_number + 1} Results",
-        data=batch_df.to_csv(index=False),
-        file_name=f"batch_{batch_number + 1}_results.csv",
-        mime="text/csv",
-        key=f"batch_{batch_number + 1}_download",  # Unique key
-    )
+    # Prepare CSV for download
+    csv = batch_df.to_csv(index=False).encode('utf-8')
+    st.session_state.batch_csvs[batch_number] = csv
 
 # UI
 st.title("LGBTQ Book Identifier")
@@ -187,12 +183,22 @@ if uploaded_file:
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
 
-            # Ensure Title is the first column in CSV
-            cumulative_df = cumulative_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
+            # Download buttons for batches
+            for batch_number in st.session_state.processed_batches:
+                if batch_number in st.session_state.batch_csvs:
+                    st.download_button(
+                        label=f"Download Batch {batch_number + 1} Results",
+                        data=st.session_state.batch_csvs[batch_number],
+                        file_name=f"batch_{batch_number + 1}_results.csv",
+                        mime="text/csv",
+                        key=f"batch_{batch_number + 1}_download",
+                    )
+
+            # Download all results
             st.download_button(
                 label="Download All Results",
-                data=cumulative_df.to_csv(index=False),
+                data=cumulative_df.to_csv(index=False).encode('utf-8'),
                 file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
-                key="cumulative_download",  # Unique key
+                key="cumulative_download",
             )
