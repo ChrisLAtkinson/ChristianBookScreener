@@ -144,6 +144,12 @@ def process_batch(batch_number, titles):
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
+    # Display batch results
+    st.write(f"Batch {batch_number + 1} Results:")
+    st.dataframe(batch_df)
+
+    # Ensure Title is the first column in CSV
+    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
     st.download_button(
         label=f"Download Batch {batch_number + 1} Results",
         data=batch_df.to_csv(index=False),
@@ -181,6 +187,8 @@ if uploaded_file:
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
 
+            # Ensure Title is the first column in CSV
+            cumulative_df = cumulative_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
             st.download_button(
                 label="Download All Results",
                 data=cumulative_df.to_csv(index=False),
