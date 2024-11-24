@@ -154,6 +154,16 @@ def process_batch(batch_number, titles):
     csv = batch_df.to_csv(index=False).encode('utf-8')
     st.session_state.batch_csvs[batch_number] = csv
 
+    # Download button after each batch
+    if st.button(f"Download Batch {batch_number + 1} Results"):
+        st.download_button(
+            label=f"Download Batch {batch_number + 1}",
+            data=st.session_state.batch_csvs[batch_number],
+            file_name=f"batch_{batch_number + 1}_results.csv",
+            mime="text/csv",
+            key=f"batch_{batch_number + 1}_download"
+        )
+
 # UI
 st.title("LGBTQ Book Identifier")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
@@ -164,7 +174,7 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500  # Batch size
+        batch_size = 200  # Batch size changed to 200 titles
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
         start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
@@ -182,17 +192,6 @@ if uploaded_file:
             ]  # Ensure 'Title' is first in the list
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
-
-            # Download buttons for batches
-            for batch_number in st.session_state.processed_batches:
-                if batch_number in st.session_state.batch_csvs:
-                    st.download_button(
-                        label=f"Download Batch {batch_number + 1} Results",
-                        data=st.session_state.batch_csvs[batch_number],
-                        file_name=f"batch_{batch_number + 1}_results.csv",
-                        mime="text/csv",
-                        key=f"batch_{batch_number + 1}_download",
-                    )
 
             # Download all results, ensuring Title remains first
             st.download_button(
