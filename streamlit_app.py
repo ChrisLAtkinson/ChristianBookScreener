@@ -34,7 +34,7 @@ if "results" not in st.session_state:
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
 if "processing_complete" not in st.session_state:
-    st.session_state.processing_complete = False  # Tracks if processing is done
+    st.session_state.processing_complete = False
 
 def search_qbd_online(title):
     try:
@@ -87,9 +87,6 @@ def analyze_lgbtq_content(text):
     return any(keyword.lower() in text_lower for keyword in LGBTQ_KEYWORDS)
 
 def process_title(title):
-    """
-    Processes a single title, combining database searches and GPT results.
-    """
     if search_qbd_online(title):
         return {
             "Title": title,
@@ -118,15 +115,11 @@ def process_title(title):
     }
 
 def process_batch(batch_number, titles):
-    """
-    Processes a batch of titles using parallel processing for efficiency.
-    """
     if batch_number in st.session_state.processed_batches:
-        return  # Skip already processed batches
+        return
 
     st.write(f"Processing Batch {batch_number + 1}...")
 
-    # Create a progress bar for the current batch
     batch_progress = st.progress(0)
     results = []
 
@@ -135,8 +128,6 @@ def process_batch(batch_number, titles):
         for idx, future in enumerate(concurrent.futures.as_completed(futures)):
             result = future.result()
             results.append(result)
-
-            # Update the progress bar dynamically
             batch_progress.progress((idx + 1) / len(titles))
 
     batch_df = pd.DataFrame(results)
@@ -144,18 +135,15 @@ def process_batch(batch_number, titles):
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
-    # Display batch results
     st.write(f"Batch {batch_number + 1} Results:")
     st.dataframe(batch_df)
 
-    # Ensure Title is the first column in CSV
-    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
     st.download_button(
         label=f"Download Batch {batch_number + 1} Results",
         data=batch_df.to_csv(index=False),
         file_name=f"batch_{batch_number + 1}_results.csv",
         mime="text/csv",
-        key=f"batch_{batch_number + 1}_download",  # Unique key
+        key=f"batch_{batch_number + 1}_download"
     )
 
 # UI
@@ -168,7 +156,7 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500  # Batch size
+        batch_size = 500
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
         start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
@@ -177,7 +165,6 @@ if uploaded_file:
         if st.button("Start Processing"):
             for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
                 process_batch(batch_number, batch)
-
             st.session_state.processing_complete = True
 
         if st.session_state.processing_complete:
@@ -187,12 +174,10 @@ if uploaded_file:
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
 
-            # Ensure Title is the first column in CSV
-            cumulative_df = cumulative_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
             st.download_button(
                 label="Download All Results",
                 data=cumulative_df.to_csv(index=False),
                 file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
-                key="cumulative_download",  # Unique key
+                key="cumulative_download"
             )
