@@ -35,8 +35,6 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
-if "current_batch" not in st.session_state:
-    st.session_state.current_batch = 0  # Start with the first batch
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False
 
@@ -172,16 +170,16 @@ if uploaded_file:
 
         st.write(f"Total Batches: {len(batches)}")
 
-        if st.button("Process Next Batch"):
-            current_batch = st.session_state.current_batch
-            if current_batch < len(batches):
-                process_batch(current_batch, batches[current_batch])
-                st.session_state.current_batch += 1
-            else:
-                st.success("All batches have been processed.")
-                st.session_state.processing_complete = True
+        start_batch = st.selectbox("Select Batch to Start:", options=list(range(1, len(batches) + 1)))
+        start_batch_index = start_batch - 1
 
-        if st.session_state.processing_complete:
+        if st.button("Process Selected Batch"):
+            if start_batch_index < len(batches):
+                process_batch(start_batch_index, batches[start_batch_index])
+            else:
+                st.error("Invalid batch selection.")
+
+        if st.session_state.results.shape[0] > 0:
             cumulative_df = st.session_state.results[
                 ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
             ]
