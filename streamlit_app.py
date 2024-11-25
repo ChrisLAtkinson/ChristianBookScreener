@@ -82,8 +82,11 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
             wait_time = (2 ** attempt) + random.uniform(0, 1)
             st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
             time.sleep(wait_time)
+        except openai.error.OpenAIError as e:
+            st.warning(f"OpenAI API error: {e}")
+            break
         except Exception as e:
-            st.warning(f"Error fetching synopsis: {e}")
+            st.warning(f"Unexpected error: {e}")
             break
     return "Failed to fetch synopsis after multiple attempts."
 
@@ -121,6 +124,7 @@ def process_title(title):
         "Confidence Level": "Low (GPT)"
     }
 
+# Batch Processing Function
 def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         st.info(f"Batch {batch_number + 1} already processed.")
@@ -130,12 +134,12 @@ def process_batch(batch_number, titles):
     batch_progress = st.progress(0)
     results = []
 
-    # Update progress dynamically
+    # Process titles sequentially for better progress updates
     for idx, title in enumerate(titles):
         result = process_title(title)
         results.append(result)
 
-        # Incrementally update the progress bar
+        # Update progress bar
         batch_progress.progress((idx + 1) / len(titles))
         time.sleep(0.1)  # Optional delay for better UI feedback
 
