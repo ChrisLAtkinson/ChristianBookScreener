@@ -35,8 +35,6 @@ if "results" not in st.session_state:
     st.session_state.results = pd.DataFrame(columns=["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"])
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
-if "processing_complete" not in st.session_state:
-    st.session_state.processing_complete = False  # Tracks if processing is done
 
 def search_qbd_online(title):
     try:
@@ -132,12 +130,14 @@ def process_batch(batch_number, titles):
     batch_progress = st.progress(0)
     results = []
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(process_title, title): title for title in titles}
-        for idx, future in enumerate(concurrent.futures.as_completed(futures)):
-            result = future.result()
-            results.append(result)
-            batch_progress.progress((idx + 1) / len(titles))
+    # Update progress dynamically
+    for idx, title in enumerate(titles):
+        result = process_title(title)
+        results.append(result)
+
+        # Incrementally update the progress bar
+        batch_progress.progress((idx + 1) / len(titles))
+        time.sleep(0.1)  # Optional delay for better UI feedback
 
     batch_df = pd.DataFrame(results)
     batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
@@ -165,19 +165,24 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500
+        batch_size = 100
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
-        start_batch_index = start_batch - 1
+        st.write(f"Total Batches: {len(batches)}")
 
-        if st.button("Start Processing"):
-            for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-                process_batch(batch_number, batch)
+        selected_batches = st.multiselect(
+            "Select Batches to Process:",
+            options=list(range(1, len(batches) + 1)),
+            format_func=lambda x: f"Batch {x}",
+        )
+        selected_batch_indices = [batch - 1 for batch in selected_batches]
 
-            st.session_state.processing_complete = True
+        if st.button("Process Selected Batches"):
+            for batch_index in selected_batch_indices:
+                process_batch(batch_index, batches[batch_index])
+            st.success("Selected batches processed successfully.")
 
-        if st.session_state.processing_complete:
+        if not st.session_state.results.empty:
             cumulative_df = st.session_state.results[
                 ["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]
             ]
