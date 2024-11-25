@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
 import time
+from datetime import timedelta
 
 # Initialize OpenAI API
 try:
@@ -62,8 +63,6 @@ def search_scholastic_online(title):
                 if title.lower() in result.text.lower():
                     return True
         return False
-    except Exception:
-        return False
 
 def fetch_synopsis_with_gpt(title, max_retries=3):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
@@ -117,12 +116,20 @@ def process_title(title):
         "Confidence Level": "Low (GPT)"
     }
 
+def format_time(seconds):
+    """Format seconds into HH:MM:SS format."""
+    td = timedelta(seconds=int(seconds))
+    return str(td)
+
 def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         return
 
     st.write(f"Processing Batch {batch_number + 1}...")
     batch_progress = st.progress(0)
+    time_estimate_placeholder = st.empty()
+
+    start_time = time.time()
     results = []
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -130,7 +137,16 @@ def process_batch(batch_number, titles):
         for idx, future in enumerate(concurrent.futures.as_completed(futures)):
             result = future.result()
             results.append(result)
+
+            elapsed_time = time.time() - start_time
+            avg_time_per_title = elapsed_time / (idx + 1)
+            remaining_time = avg_time_per_title * (len(titles) - idx - 1)
+
+            # Update the progress bar and time remaining
             batch_progress.progress((idx + 1) / len(titles))
+            time_estimate_placeholder.markdown(
+                f"**Estimated Time Remaining:** {format_time(remaining_time)}"
+            )
 
     batch_df = pd.DataFrame(results)
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
