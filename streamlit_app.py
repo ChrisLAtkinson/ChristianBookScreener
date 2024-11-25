@@ -4,6 +4,9 @@ from openai import OpenAI, RateLimitError
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
+import time
+import functools
+from tenacity import retry, wait_exponential, stop_after_attempt
 
 # Initialize OpenAI API
 try:
@@ -36,6 +39,21 @@ if "processed_batches" not in st.session_state:
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False  # Tracks if processing is done
 
+def rate_limited(max_per_second):
+    def decorator(f):
+        last_time_called = [0.0]
+        def rate_limited_function(*args, **kargs):
+            elapsed = time.time() - last_time_called[0]
+            left_to_wait = 1.0 / max_per_second - elapsed
+            if left_to_wait > 0:
+                time.sleep(left_to_wait)
+            ret = f(*args, **kargs)
+            last_time_called[0] = time.time()
+            return ret
+        return rate_limited_function
+    return decorator
+
+@rate_limited(1)  # 1 request per second
 def search_qbd_online(title):
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
@@ -50,6 +68,7 @@ def search_qbd_online(title):
     except Exception as e:
         return False
 
+@rate_limited(1)  # 1 request per second
 def search_scholastic_online(title):
     try:
         url = "https://clubs.scholastic.com/search"
@@ -64,6 +83,8 @@ def search_scholastic_online(title):
     except Exception as e:
         return False
 
+@functools.lru_cache(maxsize=None)
+@retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
 def fetch_synopsis_with_gpt(title):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
     try:
@@ -78,7 +99,7 @@ def fetch_synopsis_with_gpt(title):
         )
         return response.choices[0].message.content.strip()
     except RateLimitError:
-        return "Failed to fetch synopsis."
+        raise  # Let tenacity handle the retry
 
 def analyze_lgbtq_content(text):
     if not text:
@@ -130,7 +151,7 @@ def process_batch(batch_number, titles):
     batch_progress = st.progress(0)
     results = []
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor() as executor:
         futures = {executor.submit(process_title, title): title for title in titles}
         for idx, future in enumerate(concurrent.futures.as_completed(futures)):
             result = future.result()
