@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import time
 import random
+from openai.error import RateLimitError, OpenAIError
 
 # Initialize OpenAI API
 try:
@@ -36,6 +37,7 @@ if "results" not in st.session_state:
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
 
+# Helper functions
 def search_qbd_online(title):
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
@@ -78,11 +80,11 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
                 temperature=0.7,
             )
             return response["choices"][0]["message"]["content"].strip()
-        except openai.error.RateLimitError:
+        except RateLimitError:
             wait_time = (2 ** attempt) + random.uniform(0, 1)
             st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
             time.sleep(wait_time)
-        except openai.error.OpenAIError as e:
+        except OpenAIError as e:
             st.warning(f"OpenAI API error: {e}")
             break
         except Exception as e:
@@ -124,7 +126,6 @@ def process_title(title):
         "Confidence Level": "Low (GPT)"
     }
 
-# Batch Processing Function
 def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         st.info(f"Batch {batch_number + 1} already processed.")
@@ -134,14 +135,12 @@ def process_batch(batch_number, titles):
     batch_progress = st.progress(0)
     results = []
 
-    # Process titles sequentially for better progress updates
+    # Process titles sequentially for progress updates
     for idx, title in enumerate(titles):
         result = process_title(title)
         results.append(result)
-
-        # Update progress bar
         batch_progress.progress((idx + 1) / len(titles))
-        time.sleep(0.1)  # Optional delay for better UI feedback
+        time.sleep(0.1)  # Optional delay for UI feedback
 
     batch_df = pd.DataFrame(results)
     batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
@@ -159,7 +158,7 @@ def process_batch(batch_number, titles):
         key=f"batch_{batch_number + 1}_download"
     )
 
-# UI
+# Streamlit UI
 st.title("LGBTQ Book Identifier")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
