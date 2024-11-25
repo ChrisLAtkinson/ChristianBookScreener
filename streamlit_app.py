@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import time
 import random
-from openai.error import RateLimitError, OpenAIError
 
 # Initialize OpenAI API
 try:
@@ -37,7 +36,6 @@ if "results" not in st.session_state:
 if "processed_batches" not in st.session_state:
     st.session_state.processed_batches = set()
 
-# Helper functions
 def search_qbd_online(title):
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
@@ -49,7 +47,8 @@ def search_qbd_online(title):
                 if title.lower() in result.text.lower():
                     return True
         return False
-    except Exception:
+    except Exception as e:
+        st.warning(f"Error searching QBD: {e}")
         return False
 
 def search_scholastic_online(title):
@@ -58,12 +57,13 @@ def search_scholastic_online(title):
         response = requests.get(url, params={"q": title})
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
-            results = soup.find_all("div", "product-tile")
+            results = soup.find_all("div", class_="product-tile")
             for result in results:
                 if title.lower() in result.text.lower():
                     return True
         return False
-    except Exception:
+    except Exception as e:
+        st.warning(f"Error searching Scholastic: {e}")
         return False
 
 def fetch_synopsis_with_gpt(title, max_retries=3):
@@ -80,13 +80,14 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
                 temperature=0.7,
             )
             return response["choices"][0]["message"]["content"].strip()
-        except RateLimitError:
-            wait_time = (2 ** attempt) + random.uniform(0, 1)
-            st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
-            time.sleep(wait_time)
-        except OpenAIError as e:
-            st.warning(f"OpenAI API error: {e}")
-            break
+        except openai.error.APIError as e:
+            if "rate limit" in str(e).lower():
+                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
+                time.sleep(wait_time)
+            else:
+                st.warning(f"OpenAI API error: {e}")
+                break
         except Exception as e:
             st.warning(f"Unexpected error: {e}")
             break
@@ -107,7 +108,7 @@ def process_title(title):
             "LGBTQ Content": True,
             "Confidence Level": "High (QBD)"
         }
-    if search_scholastic_online(title):
+    elif search_scholastic_online(title):
         return {
             "Title": title,
             "Synopsis": "Identified via Scholastic",
@@ -126,6 +127,7 @@ def process_title(title):
         "Confidence Level": "Low (GPT)"
     }
 
+# Batch Processing Function
 def process_batch(batch_number, titles):
     if batch_number in st.session_state.processed_batches:
         st.info(f"Batch {batch_number + 1} already processed.")
@@ -135,12 +137,13 @@ def process_batch(batch_number, titles):
     batch_progress = st.progress(0)
     results = []
 
-    # Process titles sequentially for progress updates
     for idx, title in enumerate(titles):
         result = process_title(title)
         results.append(result)
+
+        # Update progress bar
         batch_progress.progress((idx + 1) / len(titles))
-        time.sleep(0.1)  # Optional delay for UI feedback
+        time.sleep(0.1)  # Optional delay for better UI feedback
 
     batch_df = pd.DataFrame(results)
     batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
@@ -158,7 +161,7 @@ def process_batch(batch_number, titles):
         key=f"batch_{batch_number + 1}_download"
     )
 
-# Streamlit UI
+# UI
 st.title("LGBTQ Book Identifier")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
