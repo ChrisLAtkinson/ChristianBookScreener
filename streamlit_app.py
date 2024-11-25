@@ -1,17 +1,16 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI, RateLimitError
+import openai
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
 import time
-import functools
-from tenacity import retry, wait_exponential, stop_after_attempt
+import random
 
 # Initialize OpenAI API
 try:
     API_KEY = st.secrets["openai"]["api_key"]
-    openai_client = OpenAI(api_key=API_KEY)
+    openai.api_key = API_KEY
 except KeyError:
     st.error("OpenAI API key not found. Please add it to Streamlit secrets.")
     st.stop()
@@ -39,21 +38,6 @@ if "processed_batches" not in st.session_state:
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False  # Tracks if processing is done
 
-def rate_limited(max_per_second):
-    def decorator(f):
-        last_time_called = [0.0]
-        def rate_limited_function(*args, **kargs):
-            elapsed = time.time() - last_time_called[0]
-            left_to_wait = 1.0 / max_per_second - elapsed
-            if left_to_wait > 0:
-                time.sleep(left_to_wait)
-            ret = f(*args, **kargs)
-            last_time_called[0] = time.time()
-            return ret
-        return rate_limited_function
-    return decorator
-
-@rate_limited(1)  # 1 request per second
 def search_qbd_online(title):
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
@@ -65,10 +49,9 @@ def search_qbd_online(title):
                 if title.lower() in result.text.lower():
                     return True
         return False
-    except Exception as e:
+    except Exception:
         return False
 
-@rate_limited(1)  # 1 request per second
 def search_scholastic_online(title):
     try:
         url = "https://clubs.scholastic.com/search"
@@ -80,26 +63,31 @@ def search_scholastic_online(title):
                 if title.lower() in result.text.lower():
                     return True
         return False
-    except Exception as e:
+    except Exception:
         return False
 
-@functools.lru_cache(maxsize=None)
-@retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
-def fetch_synopsis_with_gpt(title):
+def fetch_synopsis_with_gpt(title, max_retries=3):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=150,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
-    except RateLimitError:
-        raise  # Let tenacity handle the retry
+    for attempt in range(max_retries):
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=150,
+                temperature=0.7,
+            )
+            return response["choices"][0]["message"]["content"].strip()
+        except openai.error.RateLimitError:
+            wait_time = (2 ** attempt) + random.uniform(0, 1)
+            st.warning(f"Rate limit exceeded. Retrying in {wait_time:.2f} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            st.warning(f"Error fetching synopsis: {e}")
+            break
+    return "Failed to fetch synopsis after multiple attempts."
 
 def analyze_lgbtq_content(text):
     if not text:
@@ -108,9 +96,6 @@ def analyze_lgbtq_content(text):
     return any(keyword.lower() in text_lower for keyword in LGBTQ_KEYWORDS)
 
 def process_title(title):
-    """
-    Processes a single title, combining database searches and GPT results.
-    """
     if search_qbd_online(title):
         return {
             "Title": title,
@@ -139,25 +124,19 @@ def process_title(title):
     }
 
 def process_batch(batch_number, titles):
-    """
-    Processes a batch of titles using parallel processing for efficiency.
-    """
     if batch_number in st.session_state.processed_batches:
-        return  # Skip already processed batches
+        st.info(f"Batch {batch_number + 1} already processed.")
+        return
 
     st.write(f"Processing Batch {batch_number + 1}...")
-
-    # Create a progress bar for the current batch
     batch_progress = st.progress(0)
     results = []
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(process_title, title): title for title in titles}
         for idx, future in enumerate(concurrent.futures.as_completed(futures)):
             result = future.result()
             results.append(result)
-
-            # Update the progress bar dynamically
             batch_progress.progress((idx + 1) / len(titles))
 
     batch_df = pd.DataFrame(results)
@@ -165,18 +144,15 @@ def process_batch(batch_number, titles):
     st.session_state.results = pd.concat([st.session_state.results, batch_df], ignore_index=True)
     st.session_state.processed_batches.add(batch_number)
 
-    # Display batch results
     st.write(f"Batch {batch_number + 1} Results:")
     st.dataframe(batch_df)
 
-    # Ensure Title is the first column in CSV
-    batch_df = batch_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
     st.download_button(
         label=f"Download Batch {batch_number + 1} Results",
         data=batch_df.to_csv(index=False),
         file_name=f"batch_{batch_number + 1}_results.csv",
         mime="text/csv",
-        key=f"batch_{batch_number + 1}_download",  # Unique key
+        key=f"batch_{batch_number + 1}_download"
     )
 
 # UI
@@ -189,7 +165,7 @@ if uploaded_file:
         st.error("Uploaded file must contain a 'Title' column.")
     else:
         titles = books["Title"].dropna().tolist()
-        batch_size = 500  # Batch size
+        batch_size = 500
         batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
         start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
@@ -208,12 +184,10 @@ if uploaded_file:
             st.write("Cumulative Results:")
             st.dataframe(cumulative_df)
 
-            # Ensure Title is the first column in CSV
-            cumulative_df = cumulative_df[["Title", "Synopsis", "Review", "LGBTQ Content", "Confidence Level"]]
             st.download_button(
                 label="Download All Results",
                 data=cumulative_df.to_csv(index=False),
                 file_name="cumulative_lgbtq_analysis_results.csv",
                 mime="text/csv",
-                key="cumulative_download",  # Unique key
+                key="cumulative_download"
             )
