@@ -41,7 +41,7 @@ if "processing_complete" not in st.session_state:
 def search_qbd_online(title):
     try:
         url = "https://qbdatabase.wpcomstaging.com/"
-        response = requests.get(url, params={"s": title})
+        response = requests.get(url, params={"s": title}, timeout=5)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             results = soup.find_all("article")
@@ -55,7 +55,7 @@ def search_qbd_online(title):
 def search_scholastic_online(title):
     try:
         url = "https://clubs.scholastic.com/search"
-        response = requests.get(url, params={"q": title})
+        response = requests.get(url, params={"q": title}, timeout=5)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             results = soup.find_all("div", "product-tile")
@@ -66,7 +66,7 @@ def search_scholastic_online(title):
     except Exception:
         return False
 
-def fetch_synopsis_with_gpt(title, max_retries=3):
+def fetch_synopsis_with_gpt(title, max_retries=2):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
     for attempt in range(max_retries):
         try:
@@ -81,11 +81,11 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
             )
             return response.choices[0].message.content.strip()
         except RateLimitError:
-            time.sleep(2)  # Wait before retrying
+            time.sleep(1)  # Short wait before retrying
         except Exception as e:
-            st.error(f"An error occurred while fetching synopsis: {e}")
+            st.error(f"Error fetching synopsis: {e}")
             return "Error fetching synopsis"
-    return "Failed to fetch synopsis after multiple attempts."
+    return "Failed to fetch synopsis after retries."
 
 def analyze_lgbtq_content(text):
     if not text:
@@ -137,7 +137,7 @@ def process_batch(batch_number, titles):
     start_time = time.time()
     results = []
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:  # Limit concurrency
         futures = {executor.submit(process_title, title): title for title in titles}
         for idx, future in enumerate(concurrent.futures.as_completed(futures)):
             result = future.result()
@@ -147,7 +147,7 @@ def process_batch(batch_number, titles):
             avg_time_per_title = elapsed_time / (idx + 1)
             remaining_time = avg_time_per_title * (len(titles) - idx - 1)
 
-            # Update the progress bar and time remaining
+            # Update progress bar and remaining time
             batch_progress.progress((idx + 1) / len(titles))
             time_estimate_placeholder.markdown(
                 f"**Estimated Time Remaining:** {format_time(remaining_time)}"
@@ -170,32 +170,37 @@ st.title("LGBTQ Book Identifier")
 uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
 if uploaded_file:
-    books = pd.read_csv(uploaded_file)
-    if "Title" not in books.columns:
-        st.error("Uploaded file must contain a 'Title' column.")
-    else:
-        titles = books["Title"].dropna().tolist()
-        batch_size = 1000  # Updated batch size
-        batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
+    try:
+        books = pd.read_csv(uploaded_file)
+        title_column = next((col for col in books.columns if "title" in col.lower()), None)
 
-        start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
-        start_batch_index = start_batch - 1
+        if not title_column:
+            st.error("Uploaded file must contain a column with 'Title' in its name.")
+        else:
+            titles = books[title_column].dropna().tolist()
+            batch_size = 500  # Reduced batch size for faster processing
+            batches = [titles[i:i + batch_size] for i in range(0, len(titles), batch_size)]
 
-        if st.button("Start Processing"):
-            for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
-                process_batch(batch_number, batch)
+            start_batch = st.selectbox("Select Starting Batch:", options=list(range(1, len(batches) + 1)), index=0)
+            start_batch_index = start_batch - 1
 
-            st.session_state.processing_complete = True
+            if st.button("Start Processing"):
+                for batch_number, batch in enumerate(batches[start_batch_index:], start=start_batch_index):
+                    process_batch(batch_number, batch)
 
-        if st.session_state.processing_complete:
-            cumulative_df = st.session_state.results
-            st.write("Cumulative Results:")
-            st.dataframe(cumulative_df)
+                st.session_state.processing_complete = True
 
-            st.download_button(
-                label="Download All Results",
-                data=cumulative_df.to_csv(index=False),
-                file_name="cumulative_lgbtq_analysis_results.csv",
-                mime="text/csv",
-                key="cumulative_download",
-            )
+            if st.session_state.processing_complete:
+                cumulative_df = st.session_state.results
+                st.write("Cumulative Results:")
+                st.dataframe(cumulative_df)
+
+                st.download_button(
+                    label="Download All Results",
+                    data=cumulative_df.to_csv(index=False),
+                    file_name="cumulative_lgbtq_analysis_results.csv",
+                    mime="text/csv",
+                    key="cumulative_download",
+                )
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
