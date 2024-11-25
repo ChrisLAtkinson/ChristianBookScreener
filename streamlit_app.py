@@ -63,6 +63,8 @@ def search_scholastic_online(title):
                 if title.lower() in result.text.lower():
                     return True
         return False
+    except Exception:
+        return False
 
 def fetch_synopsis_with_gpt(title, max_retries=3):
     prompt = f"Provide a short synopsis for the book titled '{title}'."
@@ -80,6 +82,9 @@ def fetch_synopsis_with_gpt(title, max_retries=3):
             return response.choices[0].message.content.strip()
         except RateLimitError:
             time.sleep(2)  # Wait before retrying
+        except Exception as e:
+            st.error(f"An error occurred while fetching synopsis: {e}")
+            return "Error fetching synopsis"
     return "Failed to fetch synopsis after multiple attempts."
 
 def analyze_lgbtq_content(text):
